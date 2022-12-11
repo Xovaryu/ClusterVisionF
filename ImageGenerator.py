@@ -11,17 +11,18 @@ import numpy as np
 import glob
 import cv2
 from PIL import ImageFont, ImageDraw, Image
-try:
-	from NAID_User_Config import *
-except:
+
+if not os.path.exists("NAID_User_Config.py"):
 	f1=open("NAID_Config_Template.py","r")
 	f2=open("NAID_User_Config.py","w",encoding="utf-8")
-	f2.write(str(f1.read()))
+	f2.write(f1.read())
 	f1.close()
 	f2.close()
 	print("Configuration file copied. Please set your auth token up.")
-	time.sleep(5)
+	time.sleep(7)
 	exit()
+else:
+	from NAID_User_Config import *
 from NAID_Constants import *
 
 #Variables for the debriefing
