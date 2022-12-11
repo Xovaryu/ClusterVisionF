@@ -1,6 +1,6 @@
 #Your authorization token goes here and will need replacing once a month.
 #To get it, visit the NAI website, login and fetch your session authorization token, depending on your browser.
-auth={"auth_token":"Your own token goes here","encryption_key":"XXX"}
+auth={"auth_token":"XXX","encryption_key":"XXX"}
 
 #If Flowframes is used and the path is different it has to go here.
 FLOWFRAMES_PATH='C:/Users/Administrator/AppData/Local/Flowframes/Flowframes.exe'
