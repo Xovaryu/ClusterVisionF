@@ -130,3 +130,6 @@ dmypy.json
 
 # NAID image gen output
 __0utput__/
+
+# User configuration
+NAID_Config.py
