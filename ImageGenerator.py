@@ -9,15 +9,10 @@ import random
 import copy
 import numpy as np
 import glob
+import cv2
 from PIL import ImageFont, ImageDraw, Image
 from NAID_Config import *
 from NAID_Constants import *
-
-#This tries to import OpenCV and is needed for video processing and making cluster collages. OpenCV needs to be installed separately via PIP
-try:
-	import cv2
-except:
-	print('Failed to import OpenCV, video creation will not work')
 
 #Variables for the debriefing
 PRODUCED_IMAGES=0

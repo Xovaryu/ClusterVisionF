@@ -2,10 +2,10 @@
 #To get it, visit the NAI website, login and fetch your session authorization token, depending on your browser.
 auth={"auth_token":"XXX","encryption_key":"XXX"}
 
-#If Flowframes is used and the path is different it has to go here
+#If Flowframes is used and the path is different it has to go here.
 FLOWFRAMES_PATH='C:/Users/Administrator/AppData/Local/Flowframes/Flowframes.exe'
 
-#Fonts for seeds in cluster collages
+#Fonts for seeds in cluster collages.
 CC_SEEDS_FONT=['./ebrima.ttf',29]
 	
 PROMPT_STABBER_DEFAULT_SEEDS=[
