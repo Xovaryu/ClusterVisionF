@@ -1,7 +1,7 @@
 # NovelAIDiffusion-API
 
 ### Prerequisites
-Only a functional Python (3) installation should be needed for image sequences. For videos and cluster collages, install OpenCV via PIP. To automatically create interpolated videos Flowframes can also be used.
+A functional Python (3) installation and the following packages easily installable via PIP: requests, pillow, numpy, opencv-python
 
 ### Usage
 First, get your NAI access token and put it into NAID_Config.py, it will need to be refreshed every 30 days.
