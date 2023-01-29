@@ -4,11 +4,11 @@ SPACE_NONE=[" ",""]
 ALT30_LIST=[
 ["☺",1],
 ["☻",2],
-["♥",0.25],
+["♥",1/4],
 ["♦",1],
 ["♣",2],
 ["♠",2],
-["•",0.125],
+["•",1/8],
 ["◘",2],
 ["○",2],
 ["◙",2],
@@ -22,7 +22,7 @@ ALT30_LIST=[
 ["↕",2],
 ["‼",1],
 ["¶",2],
-["▬",0.5],
+["▬",1/2],
 ["↨",2],
 ["↑",2],
 ["↓",2],
@@ -93,6 +93,45 @@ OTHER_LIST=[
 ["æ",1],
 ["♡",1/2],
 ]
+
+HEARTS=[
+["♥",1/4],#Black Heart Suit
+["❤",1/4],#Heavy Black Heart
+["♡",1/2],#White Heart Suit
+["❣",1],#Heavy Heart Exclamation Mark Ornament
+["❥",2],#Rotated Heavy Black Heart Bullet
+["❦",2],#Floral Heart
+["❧",2],#Rotated Floral Heart Bullet
+]
+
+HEART_EMOJIS=[
+["💗",1/2],#Growing Heart
+["💖",1/2],#Sparkling Heart
+["💔",1/2],#Broken Heart
+["💕",1/2],#Two Hearts
+["♥️",1/2],#Heart Suit
+["💓",1],#Beating Heart
+["💟",1],#Heart Decoration
+["💝",1],#Heart with Ribbon
+["💘",1],#Heart with Arrow
+["💞",1],#Revolving Hearts
+["❣️",2],#Heavy Heart Exclamation Mark Ornament Emoji
+["🫀",3],#Anatomical Heart
+]
+
+COLORED_HEART_EMOJIS=[
+["❤️",1/4],#Red Heart
+["💙",1/2],#Blue Heart
+["💚",1/2],#Green Heart
+["💜",1/2],#Purple Heart
+["💛",1/2],#Yellow Heart
+["🧡",1],#Orange Heart
+["🖤",1],#Black Heart
+["🤍",2],#White Heart
+["🤎",2],#Brown Heart
+]
+
+VAR_SEL_16=["️",1],#Variation Selector-16
 
 EMPTY_CHARS=[
 [" ‎",1],

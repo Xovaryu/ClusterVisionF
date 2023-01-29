@@ -1,6 +1,8 @@
 from ImageGenerator import *
 from NAID_Tokens import *
 
+#Version: 2
+
 ###
 # Examples&Tutorial
 ###
@@ -28,8 +30,10 @@ settings={
 'prompt':'''kitsune monster girl,lady,lolita fashion,smile,sitting on couch''',
 'UCp':'FurryNone',
 'UC':'''nsfw,worst quality,low quality,what has science done,what,nightmare fuel,eldritch horror,where is your god now,why,''',
-'quantity':range(28)
+'video':'',
+'quantity':range(28),
 }
+render_loop(settings)
 """
 #range(28) will give us 28 pictures. Ranges start with 0 and omit the last number, so this one goes from 0-27.
 #The function you'll want to call with settings like these is render_loop(settings).
@@ -68,8 +72,10 @@ settings={
 ],
 'UCp':'FurryNone',
 'UC':'''nsfw,worst quality,low quality,what has science done,what,nightmare fuel,eldritch horror,where is your god now,why,''',
-'quantity':range(101)
+'video':'',
+'quantity':range(101),
 }
+render_loop(settings)
 """
 #The range is 101, since that range goes from 0-100, so that it really starts on a value of 0 for the 1st and 1 for the 2nd prompt, ending with the inverse.
 
@@ -91,11 +97,14 @@ settings={
 'UC':[
 ['''f"nsfw,worst quality,low quality,what has science done,what,nightmare fuel,eldritch horror,where is your god now,why,{UC_list[1]*n}"''','#']
 ],
-'quantity':range(196)
+'video':'',
+'quantity':range(196),
 }
+render_loop(settings)
 """
 #f-strings and all of the operators do still work on both numbers and strings without builtin functions, and should be sufficient to get most things working.
-#When an image sequence is finished you can generate videos out of it with OpenCV/Flowframes, for that look at the bottom of this file.
+#When an image sequence is finished you can generate videos out of it with OpenCV/Flowframes, for that  set video as either 'standard' or 'interpolated'.
+#Alternatively look at the bottom of this file to do it manually. Also be aware that your default settings can be configured in NAID_User_Config.py
 
 #---Prompt stabbing---
 
@@ -137,10 +146,13 @@ settings={
 'prompt':'''kitsune monster girl,lady,lolita fashion,smile,sitting on couch''',
 'UCp':'FurryNone',
 'UC':'''nsfw,worst quality,low quality,what has science done,what,nightmare fuel,eldritch horror,where is your god now,why,''',
-'collage_width':3
+'collage_width':3,
 }
+prompt_stabber(settings)
 """
 #There is a different function for promptstabbing, prompt_stabber(settings).
+#Both render_loop() and prompt_stabber() can be run without actually generating images if those have already been created, like this: render_loop(settings,only_gen_path=True)
+#Doing so may be useful when you only want to generate a video or cluster collage again, for example when you adjusted the fonts used for cluster collages.
 
 #Stay safe, have some fun and generate some greatness.
 
@@ -165,16 +177,23 @@ settings={
 'prompt':'''kitsune monster girl,lady,lolita fashion,smile,sitting on couch''',
 'UCp':'FurryNone',
 'UC':'''nsfw,worst quality,low quality,what has science done,what,nightmare fuel,eldritch horror,where is your god now,why,''',
-'quantity':range(28)
+'video':'',
+'quantity':range(28),
 }
 render_loop(settings)
 #prompt_stabber(settings)
 
-#Assuming you have OpenCV/Flowframes installed you can uncomment the following lines to turn creations into videos after they're finished.
-#Keep in mind that you may have to switch between name/folder_name depending on your settings
-#make_vid(settings['name'],fps=7)
-#interpolate_vid(settings['name'],factor=4,output_mode=2)
-#make_interpolated_vid(settings['name'])
+###
+#Processing and finishing up
+###
+#This function will go through every task you set up above via render_loop() or prompt_stabber(). Pass an integer for the number of tasks you want to skip.
+process_queue()
+#Assuming you have OpenCV/Flowframes installed and want to manually handle making videos you can uncomment the following lines to turn creations into videos after they're finished.
+#Keep in mind that you may have to switch between name/folder_name depending on your settings.
+#further be aware that executing these before process_queue() would probably try to make a video from an unfinished task.
+#make_vid(settings['name'],fps=BASE_FPS)
+#interpolate_vid(settings['name'],factor=FF_FACTOR,output_mode=FF_OUTPUT_MODE)
+#make_interpolated_vid(settings['name'],fps=BASE_FPS,factor=FF_FACTOR,output_mode=FF_OUTPUT_MODE)
 
 debriefing()
 print(f'Total Execution Time: {round(time.time()-start,3)}s')

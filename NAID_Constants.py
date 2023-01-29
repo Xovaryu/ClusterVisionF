@@ -3,9 +3,7 @@ URL='https://api.novelai.net/ai/generate-image'
 
 #This is a list reflecting the online UI UC presets
 UNDESIRED_CONTENT_LISTS={
-'AnimeLQBA':[0,'''nsfw,lowres,bad anatomy,bad hands,text,error,missing fingers,
-extra digit,fewer digits,cropped,worst quality,low quality,normal quality,
-jpeg artifacts,signature,watermark,username,blurry,'''],
+'AnimeLQBA':[0,'''nsfw,lowres,bad anatomy,bad hands,text,error,missing fingers,extra digit,fewer digits,cropped,worst quality,low quality,normal quality,jpeg artifacts,signature,watermark,username,blurry,'''],
 'AnimeLQ':[1,'nsfw,lowres,text,cropped,worst quality,low quality,normal quality,jpeg artifacts,signature,watermark,username,blurry'],
 'AnimeNone':[2,''],
 'FurryLQ-Deprecated':[0,'nsfw,{worst quality},{bad quality},text,signature,watermark,'],
@@ -21,14 +19,18 @@ MODELS={'Curated':'safe-diffusion','Full':'nai-diffusion','Furry':'nai-diffusion
 #These are the image modes as used on the website
 IMAGE_MODES={
 'PortraitNormal':
-{'width': 512, 'height': 768},
+{'width':512, 'height':768},
 'LandscapeNormal':
-{'width': 768, 'height': 512},
+{'width':768, 'height':512},
 'SquareNormal':	
-{'width': 640, 'height': 640,},
+{'width':640, 'height':640,},
 'PortraitLarge':
-{'width': 512, 'height': 1024},
+{'width':512, 'height':1024},
 'LandscapeLarge':
-{'width': 1024,'height': 512},
+{'width':1024,'height':512},
 'SquareLarge':
-{'width': 1024,'height': 1024},}
+{'width':1024,'height':1024},
+'TrueLandscapeLarge':
+{'width':1152,'height':768},
+'TruePortraitLarge':
+{'width':768,'height':1152},}
