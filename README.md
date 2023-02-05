@@ -37,8 +37,8 @@ I also have a discord server where I organize all my AI image generation endeavo
 
 ### Version 2.1
 #### Added Features/Changes
--Streamlined the fallback font writing system further
--Added an experimental way to manually adjust cluster collage folder structure further
--Changed the function definition order to place related functions closer together
+-Streamlined the fallback font writing system further  
+-Added an experimental way to manually adjust cluster collage folder structure further  
+-Changed the function definition order to place related functions closer together  
 #### Bug Fixes
 -Fixed a few cluster collage header bugs
