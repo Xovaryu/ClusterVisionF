@@ -58,6 +58,8 @@ FONT_LIST = CUSTOM_FONT_LIST_PREPEND + [
 	#GNU Unifont from unifoundry.com provided with OFL v1.1 and GNU GPL 2+ with the GNU font embedding exception
 	'fonts/unifont_jp-15.0.01.ttf',
 ] + CUSTOM_FONT_LIST_APPEND
+FONT_OBJS = [ImageFont.truetype(x, FONT_SIZE) for x in FONT_LIST]
+TT_FONTS = [TTFont(x) for x in FONT_LIST]
 
 ###
 # Primary Functions
@@ -182,6 +184,13 @@ def generate_seed_cluster(dimensions):
 #Additional Media Functions
 ###
 
+#Saves used settings
+def save_settings(folder_name,settings,sub_folder=''):
+	if not os.path.exists(f'__0utput__/{replace_forbidden_symbols(folder_name)}{sub_folder}'): os.makedirs(f'__0utput__/{replace_forbidden_symbols(folder_name)}{sub_folder}')
+	t=open(f'__0utput__/{replace_forbidden_symbols(folder_name)}{sub_folder}/settings꞉{replace_forbidden_symbols(settings["name"])}.py','w',encoding="utf_16")
+	t.write(f'settings={settings}')
+	t.close
+	
 #Creates a video from all PNG files in a folder. Needs them to be properly sorted by name
 #Hence do make sure not to have other PNG files there, collages are saved as JPG
 def make_vid(img_folder,fps=7,base_path='__0utput__/'):
@@ -244,11 +253,11 @@ def make_collage(imgs,name,row_length=5,name_extra="",passed_image_mode=False,fo
 
 #Attaches a metadata header to the picture and saves it
 def attach_metadata_header(img_collages,settings,name_extra):
-	global FONT_SIZE
 	img_collages=Image.fromarray(img_collages)
 	#Text configuration
 	line_height=FONT_SIZE+5
 	font=ImageFont.truetype(FONT_LIST[0],FONT_SIZE)
+	left_meta_block=900
 	
 	#Creating the header
 	img_header = Image.new("RGB", (img_collages.width, line_height*8), (0, 0, 0))
@@ -257,89 +266,89 @@ def attach_metadata_header(img_collages,settings,name_extra):
 	#Draw the basic metadata on the left side
 	draw.text((10,line_height*0),f"Xovaryu's Prompt Stabber",font=font,fill=(255,220,255,0))
 	draw.text((10,line_height*1),f'Creator: {CREATOR_NAME}',font=font,fill=(200,200,255,0))
-	draw, img_header, used_lines_name=fallback_font_writer(draw, img_header, f'Name: {settings["name"]}', 10, line_height*2, 800, 1, FONT_SIZE, line_height, (255,255,255,0))
-	draw.text((10,line_height*(2+used_lines_name)),f'NovelAI Model: {settings["model"]}',font=font,fill=(255,255,255,0))
+	draw, img_header, used_lines_name=fallback_font_writer(draw, img_header, f'Name: {settings["name"]}', 10, line_height*2, left_meta_block, 1, line_height, (255,255,255,0))
+	if settings["model"] == 'safe-diffusion':
+		model = 'NovelAI Diffusion Curated v1.0'
+	elif settings["model"] == 'nai-diffusion':
+		model = 'NovelAI Diffusion Full v1.0'
+	elif settings["model"] == 'nai-diffusion-furry':
+		model = 'NovelAI Diffusion Furry v1.3'
+	draw.text((10,line_height*(2+used_lines_name)),f'NovelAI Model: {model}',font=font,fill=(255,255,255,0))
 	draw.text((10,line_height*(3+used_lines_name)),f'Resolution {settings["img_mode"]}',font=font,fill=(255,255,255,0))
 	draw.text((10,line_height*(4+used_lines_name)),f'Sampler: {settings["sampler"]}',font=font,fill=(255,255,255,0))
 	draw.text((10,line_height*(5+used_lines_name)),f'Steps: {settings["steps"]}',font=font,fill=(255,255,255,0))
 	draw.text((10,line_height*(6+used_lines_name)),f'Scale: {settings["scale"]}',font=font,fill=(255,255,255,0))
-	
+
 	currently_used_lines=7+used_lines_name
 	#Draw the prompt and UC on the right side
 	full_prompt=settings["QT"]+settings["prompt"]
-	draw, img_header, used_lines_prompt=fallback_font_writer(draw, img_header, full_prompt, 800, line_height*0, img_collages.size[0]-800, currently_used_lines, FONT_SIZE, line_height, (200,255,200,0))
+	draw, img_header, used_lines_prompt=fallback_font_writer(draw, img_header, full_prompt, left_meta_block, line_height*0, img_collages.size[0]-left_meta_block, currently_used_lines, line_height, (200,255,200,0))
 	currently_used_lines=max(currently_used_lines,used_lines_prompt)
 	available_lines = currently_used_lines-used_lines_prompt
-	
+
 	full_UC=UNDESIRED_CONTENT_LISTS[settings["UCp"]][1]+settings["UC"]
-	draw, img_header, used_lines_uc=fallback_font_writer(draw, img_header, full_UC, 800, line_height*(used_lines_prompt), img_collages.size[0]-800, available_lines, FONT_SIZE, line_height, (255,200,200,0))
-	
+	draw, img_header, used_lines_uc=fallback_font_writer(draw, img_header, full_UC, left_meta_block, line_height*(used_lines_prompt), img_collages.size[0]-left_meta_block, available_lines, line_height, (255,200,200,0))
+
 	#Combining and saving
 	full_img = Image.new('RGB', (img_collages.width, img_header.height + img_collages.height))
 	full_img.paste(img_header, (0, 0))
 	full_img.paste(img_collages, (0, img_header.height))
-	full_img.save(f'__0utput__/{replace_forbidden_symbols(settings["folder_name"])}/#ClusterCollages/{replace_forbidden_symbols(settings["name"])}_Collage({replace_forbidden_symbols(name_extra)}).jpg')
+	if settings.get('folder_name_user'):
+		settings["folder_name_extra"]=settings["folder_name_user"]+f'/{settings["name"]}'
+		path=f'__0utput__/{replace_forbidden_symbols(settings["folder_name"])}/#ClusterCollages{settings["folder_name_user"]}/'
+		if not os.path.exists(path): os.makedirs(path)
+		full_img.save(f'{path}{replace_forbidden_symbols(settings["name"])}_Collage({replace_forbidden_symbols(name_extra)}).jpg')
+	else:
+		full_img.save(f'__0utput__/{replace_forbidden_symbols(settings["folder_name"])}/#ClusterCollages/{replace_forbidden_symbols(settings["name"])}_Collage({replace_forbidden_symbols(name_extra)}).jpg')
+	
 
 #Writes a text character by character, going through a list of fonts and trying to find one that has the requested character
-def fallback_font_writer(draw, img, text, x, y, wrap_x, available_y_lines, font_size, line_height, fill):
+def fallback_font_writer(draw, img, text, x, y, wrap_x, available_y_lines, line_height, fill):
 	# Initialize needed variables
 	starting_x = x
 	line_width = 0
 	used_lines = 1
-	newline=False
+	safety_offset_x = 75
+	newline = False
 
 	# Iterate through each character in the text
 	for char in text:
 		# Determine whether to draw the character in the current or a next line
-		if line_width > wrap_x - 75:
-			if available_y_lines*line_height<y+line_height:
-				available_y_lines -= 1
+		if line_width > wrap_x - safety_offset_x:
 			x = starting_x
 			y += line_height
 			used_lines += 1
-			newline=True
+			newline = True
 		#Make sure there's room to write
-		while available_y_lines<1:
+		if used_lines > available_y_lines:
 			img = ImageOps.expand(img, border=(0, 0, 0, line_height), fill=(0, 0, 0))
 			draw = ImageDraw.Draw(img)
 			available_y_lines += 1
 		# Try to render the character with each font in the font list
 		font_used = None
-		for font_path in FONT_LIST:
-			font_obj = ImageFont.truetype(font_path, font_size)
-			# Open the font with fonttools
-			ttfont = TTFont(font_path)
+		for n in range(len(FONT_LIST)):
 			# Check if the font has the character in its character map
-			char_code = ord(char)
-			if char_code in ttfont['cmap'].getBestCmap().keys():
-				font_used = font_obj
-				draw.text((x, y), char, font=font_obj, fill=fill)
+			if ord(char) in TT_FONTS[n]['cmap'].getBestCmap().keys():
+				font_used = FONT_OBJS[n]
+				draw.text((x, y), char, font=font_used, fill=fill)
 				break
 		# If a font was used, get the size of the character and update the x position
 		if font_used:
+			char_bbox = draw.textbbox((0, 0), char, font=font_used)
+			width, height = char_bbox[2] - char_bbox[0], char_bbox[3] - char_bbox[1]
 			if newline == True:
-				char_bbox = draw.textbbox((0, 0), char, font=font_used)
-				width, height = char_bbox[2] - char_bbox[0], char_bbox[3] - char_bbox[1]
 				line_width = width
 				newline = False
 			else:
-				char_bbox = draw.textbbox((0, 0), char, font=font_used)
-				width, height = char_bbox[2] - char_bbox[0], char_bbox[3] - char_bbox[1]
 				line_width += width
-				x += width
+			x += width
 		# If no font was able to render the character, skip it
 		else:
 			print(f'Warning: Unable to render character: {ord(char)}')
 			continue
+			newline = False
 	return draw, img, used_lines
 
-#Saves used settings
-def save_settings(folder_name,settings,sub_folder=''):
-	if not os.path.exists(f'__0utput__/{replace_forbidden_symbols(folder_name)}{sub_folder}'): os.makedirs(f'__0utput__/{replace_forbidden_symbols(folder_name)}{sub_folder}')
-	t=open(f'__0utput__/{replace_forbidden_symbols(folder_name)}{sub_folder}/settings꞉{replace_forbidden_symbols(settings["name"])}.py','w',encoding="utf_16")
-	t.write(f'settings={settings}')
-	t.close
-	
 ###
 #Rendering Functions
 ###
@@ -349,76 +358,6 @@ def generate_as_is(settings,enumerator,only_gen_path=False):
 	prompt=form_prompt(settings)
 	filepath=make_file_path(prompt,enumerator,settings["folder_name"],settings["folder_name_extra"])
 	return image_gen(auth,prompt,filepath,only_gen_path)
-
-#Renders a loop according to the settings and saves those
-#Does some pre-processing, then adds a task to the PROCESSING_QUEUE which will be processed with render_loop_process
-def render_loop(settings,eval_guard=True,only_gen_path=False):
-	global QUEUED_IMAGES
-	number_of_imgs=len(settings["quantity"])
-
-	#Configures the seed
-	if settings["seed"]=='random':
-		settings["seed"]=generate_seed()
-	elif type(settings["seed"])==int:
-		pass
-	else:
-		settings["seed"]=4246521898
-
-	#Adjusts all other needed parameters and adds the task
-	QUEUED_IMAGES+=number_of_imgs
-	settings["number_of_imgs"]=number_of_imgs
-	settings["processing_type"]='loop'
-	if only_gen_path:
-		settings["only_gen_path"]=True
-	else:
-		settings["only_gen_path"]=False
-	if eval_guard:
-		settings["eval_guard"]=True
-	else:
-		settings["eval_guard"]=False
-	PROCESSING_QUEUE.append(settings)
-
-def render_loop_process(settings):
-	save_settings(settings["folder_name"],settings)
-	imgs=[]
-	img_settings=copy.deepcopy(settings)
-
-	img_settings["folder_name_extra"]=''
-	if settings["folder_name"]=="":
-		img_settings["folder_name"]=settings["name"]
-	rendered_imgs=1
-	for n in settings["quantity"]:
-		enumerator=f'''({img_settings["seed"]})(#{str((n+1)).rjust(4,'0')})'''
-		if not(type(settings["scale"])==int or type(settings["scale"])==float):
-			img_settings["scale"]=settings["scale"][0]+settings["scale"][1]*n
-			enumerator+=f'(Scale꞉{img_settings["scale"]})'
-		if type(settings["steps"])!=int:
-			img_settings["steps"]=settings["steps"][0]+int(settings["steps"][1]*n)
-			enumerator+=f'(Steps꞉{img_settings["steps"]})'
-		if type(settings["prompt"])!=str:
-			img_settings["prompt"]=""
-			for prompt_list in settings["prompt"]:
-				if settings["eval_guard"]:
-					img_settings["prompt"]+=eval(prompt_list[0],{'__builtins__':{}},{'n':n,'prompt_list':prompt_list})
-				else:
-					img_settings["prompt"]+=eval(prompt_list[0],{},{'n':n,'prompt_list':prompt_list})
-		if type(settings["UC"])!=str:
-			img_settings["UC"]=""
-			for UC_list in settings["UC"]:
-				if settings["eval_guard"]:
-					img_settings["UC"]+=eval(UC_list[0],{"__builtins__":{}},{'n':n,'UC_list':UC_list})
-				else:
-					img_settings["UC"]+=eval(UC_list[0],{},{'n':n,'UC_list':UC_list})
-		print(f'Processing task: {FINISHED_TASKS+1+SKIPPED_TASKS}/{PROCESSING_QUEUE_LEN}')
-		print(f'Rendering img (current task): {rendered_imgs}/{settings["number_of_imgs"]}')
-		print(f'Rendering img (complete queue): {PRODUCED_IMAGES+1+SKIPPED_IMAGES}/{QUEUED_IMAGES}')
-		imgs.append(generate_as_is(img_settings,enumerator,settings["only_gen_path"]))
-		rendered_imgs+=1
-	if settings['video'] == 'standard':
-		FUTURES.append(EXECUTOR.submit(make_vid,settings['name'],fps=BASE_FPS))
-	elif settings['video'] == 'interpolated':
-		FUTURES.append(EXECUTOR.submit(make_interpolated_vid,settings['name'],fps=BASE_FPS,factor=FF_FACTOR,output_mode=FF_OUTPUT_MODE))
-	return imgs
 
 #Takes a prompt and renders it across multiple seeds at multiple scales, then puts all generations into a big collage together with the metadata
 #If a seed list is passed or the default is used, make sure it has enough seeds for the requested amount of scales (collage_width²)
@@ -489,7 +428,10 @@ def prompt_stabber_process(settings):
 		collage_row=[]
 		for seed in seed_sub_list:
 			imgs=[]
-			img_settings["folder_name_extra"]=f'/_{img_settings["name"]}'
+			if img_settings.get('folder_name_user'):
+				img_settings["folder_name_extra"]=img_settings["folder_name_user"]+f'/{img_settings["name"]}'
+			else:
+				img_settings["folder_name_extra"]=f'/{img_settings["name"]}'
 			for n in range(settings["collage_width_squared"]):
 				img_settings["scale"]=round(scale_list[0]+scale_list[1]*n,2)
 				img_settings["steps"]=int(steps_list[0]+steps_list[1]*n)
@@ -524,6 +466,76 @@ def prompt_stabber_process(settings):
 	FUTURES.append(EXECUTOR.submit(attach_metadata_header, cluster_collage, settings, f'Cluster[{settings["sampler"]}]'))
 	#attach_metadata_header(cluster_collage, settings, f'Cluster[{settings["sampler"]}]')
 	FINISHED_TASKS+=1
+
+#Renders a loop according to the settings and saves those
+#Does some pre-processing, then adds a task to the PROCESSING_QUEUE which will be processed with render_loop_process
+def render_loop(settings,eval_guard=True,only_gen_path=False):
+	global QUEUED_IMAGES
+	number_of_imgs=len(settings["quantity"])
+
+	#Configures the seed
+	if settings["seed"]=='random':
+		settings["seed"]=generate_seed()
+	elif type(settings["seed"])==int:
+		pass
+	else:
+		settings["seed"]=4246521898
+
+	#Adjusts all other needed parameters and adds the task
+	QUEUED_IMAGES+=number_of_imgs
+	settings["number_of_imgs"]=number_of_imgs
+	settings["processing_type"]='loop'
+	if only_gen_path:
+		settings["only_gen_path"]=True
+	else:
+		settings["only_gen_path"]=False
+	if eval_guard:
+		settings["eval_guard"]=True
+	else:
+		settings["eval_guard"]=False
+	PROCESSING_QUEUE.append(settings)
+
+def render_loop_process(settings):
+	save_settings(settings["folder_name"],settings)
+	imgs=[]
+	img_settings=copy.deepcopy(settings)
+
+	img_settings["folder_name_extra"]=''
+	if settings["folder_name"]=="":
+		img_settings["folder_name"]=settings["name"]
+	rendered_imgs=1
+	for n in settings["quantity"]:
+		enumerator=f'''({img_settings["seed"]})(#{str((n+1)).rjust(4,'0')})'''
+		if not(type(settings["scale"])==int or type(settings["scale"])==float):
+			img_settings["scale"]=settings["scale"][0]+settings["scale"][1]*n
+			enumerator+=f'(Scale꞉{img_settings["scale"]})'
+		if type(settings["steps"])!=int:
+			img_settings["steps"]=settings["steps"][0]+int(settings["steps"][1]*n)
+			enumerator+=f'(Steps꞉{img_settings["steps"]})'
+		if type(settings["prompt"])!=str:
+			img_settings["prompt"]=""
+			for prompt_list in settings["prompt"]:
+				if settings["eval_guard"]:
+					img_settings["prompt"]+=eval(prompt_list[0],{'__builtins__':{}},{'n':n,'prompt_list':prompt_list})
+				else:
+					img_settings["prompt"]+=eval(prompt_list[0],{},{'n':n,'prompt_list':prompt_list})
+		if type(settings["UC"])!=str:
+			img_settings["UC"]=""
+			for UC_list in settings["UC"]:
+				if settings["eval_guard"]:
+					img_settings["UC"]+=eval(UC_list[0],{"__builtins__":{}},{'n':n,'UC_list':UC_list})
+				else:
+					img_settings["UC"]+=eval(UC_list[0],{},{'n':n,'UC_list':UC_list})
+		print(f'Processing task: {FINISHED_TASKS+1+SKIPPED_TASKS}/{PROCESSING_QUEUE_LEN}')
+		print(f'Rendering img (current task): {rendered_imgs}/{settings["number_of_imgs"]}')
+		print(f'Rendering img (complete queue): {PRODUCED_IMAGES+1+SKIPPED_IMAGES}/{QUEUED_IMAGES}')
+		imgs.append(generate_as_is(img_settings,enumerator,settings["only_gen_path"]))
+		rendered_imgs+=1
+	if settings['video'] == 'standard':
+		FUTURES.append(EXECUTOR.submit(make_vid,settings['name'],fps=BASE_FPS))
+	elif settings['video'] == 'interpolated':
+		FUTURES.append(EXECUTOR.submit(make_interpolated_vid,settings['name'],fps=BASE_FPS,factor=FF_FACTOR,output_mode=FF_OUTPUT_MODE))
+	return imgs
 
 ###
 # Task processing functions
