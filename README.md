@@ -34,3 +34,11 @@ I also have a discord server where I organize all my AI image generation endeavo
 --Since the changes to the collage generation substantially increase the workload, the brunt of their creation, as well as the creation of videos which already was a little slower, will now be performed in separate threads so the image generation will proceed without interruption.  
 #### Bug Fixes
 -Switched settings encoding to UTF-16 to prevent corruption of characters like `🤎` which is the "Brown Heart Emoji".
+
+### Version 2.1
+#### Added Features/Changes
+-Streamlined the fallback font writing system further
+-Added an experimental way to manually adjust cluster collage folder structure further
+-Changed the function definition order to place related functions closer together
+#### Bug Fixes
+-Fixed a few cluster collage header bugs
