@@ -42,3 +42,12 @@ I also have a discord server where I organize all my AI image generation endeavo
 -Changed the function definition order to place related functions closer together  
 #### Bug Fixes
 -Fixed a few cluster collage header bugs
+
+### Version 2.2
+#### Added Features/Changes
+-Added detection for invalid access tokens  
+-Improved formatting of saved settings to streamline their appearance and usability  
+#### Bug Fixes
+-Fixed an issue with superfluous information in saved settings  
+-Fixed an issue with saved cluster collage settings, seeds wouldn't be replaced correctly, requiring manual adjustment  
+-Fixed task counter for render loops  
