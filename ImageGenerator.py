@@ -132,6 +132,9 @@ def image_gen(auth,prompt,filepath,only_gen_path=False):
 			resp_length=len(resp_content)
 			if resp_length>1000:
 				print(f'Response length: {resp_length}')
+			elif resp_content == b'{"statusCode":401,"message":"Invalid accessToken."}':
+				print(f'Invalid access token. Please fetch your current token from the website.')
+				exit()
 			else:
 				print(f'Likely fault detected: {resp_content}')
 			base64_image=resp_content.splitlines()[2].replace(b"data:", b"")
@@ -187,10 +190,19 @@ def generate_seed_cluster(dimensions):
 #Saves used settings
 def save_settings(folder_name,settings,sub_folder=''):
 	if not os.path.exists(f'__0utput__/{replace_forbidden_symbols(folder_name)}{sub_folder}'): os.makedirs(f'__0utput__/{replace_forbidden_symbols(folder_name)}{sub_folder}')
-	t=open(f'__0utput__/{replace_forbidden_symbols(folder_name)}{sub_folder}/settings꞉{replace_forbidden_symbols(settings["name"])}.py','w',encoding="utf_16")
-	t.write(f'settings={settings}')
-	t.close
-	
+	with open(f'__0utput__/{replace_forbidden_symbols(folder_name)}{sub_folder}/settings꞉{replace_forbidden_symbols(settings["name"])}.py','w',encoding="utf_16") as file:
+		file.write('settings={\n')
+		for key, value in settings.items():
+			if isinstance(value, list) and all(isinstance(item, list) for item in value):
+				file.write(f"{repr(key)}: [")
+				for item in value:
+					file.write(f"\n[{', '.join(repr(elem) for elem in item)}],")
+				file.write(f"],\n")
+			else:
+				file.write(f"{repr(key)}: {repr(value)},\n")
+		file.write('}')
+	file.close
+
 #Creates a video from all PNG files in a folder. Needs them to be properly sorted by name
 #Hence do make sure not to have other PNG files there, collages are saved as JPG
 def make_vid(img_folder,fps=7,base_path='__0utput__/'):
@@ -373,6 +385,20 @@ def prompt_stabber(settings,only_gen_path=False):
 	else:
 		seed_list=settings["seed"]
 
+	#Saving settings and configuring folder structure
+	conf_settings=copy.deepcopy(settings)
+	conf_settings["seed"]=seed_list
+	if settings["folder_name"]=="":
+		conf_settings["folder_name"]=settings["name"]
+		if not os.path.exists(f'__0utput__/{replace_forbidden_symbols(conf_settings["folder_name"])}/#ClusterCollages/'):
+			os.makedirs(f'__0utput__/{replace_forbidden_symbols(conf_settings["folder_name"])}/#ClusterCollages/')
+		save_settings(conf_settings["folder_name"],settings,sub_folder='/#ClusterCollages')
+		settings["folder_name"]=settings["name"]
+	else:
+		if not os.path.exists(f'__0utput__/{replace_forbidden_symbols(settings["folder_name"])}/#ClusterCollages/'):
+			os.makedirs(f'__0utput__/{replace_forbidden_symbols(settings["folder_name"])}/#ClusterCollages/')
+		save_settings(conf_settings["folder_name"],settings,sub_folder='/#ClusterCollages')
+
 	collage_width_squared=settings["collage_width"]*settings["collage_width"]
 	number_of_imgs=collage_width_squared*len(seed_list)*len(seed_list[0])
 
@@ -392,18 +418,6 @@ def prompt_stabber_process(settings):
 	global PRODUCED_IMAGES,QUEUED_IMAGES,FINISHED_TASKS,SKIPPED_IMAGES,SKIPPED_TASKS,FUTURE_LIST, EXECUTOR
 	rendered_imgs=1
 	img_settings=copy.deepcopy(settings)
-
-	#Saving settings and configuring folder structure
-	if settings["folder_name"]=="":
-		img_settings["folder_name"]=settings["name"]
-		if not os.path.exists(f'__0utput__/{replace_forbidden_symbols(img_settings["folder_name"])}/#ClusterCollages/'):
-			os.makedirs(f'__0utput__/{replace_forbidden_symbols(img_settings["folder_name"])}/#ClusterCollages/')
-		save_settings(img_settings["folder_name"],settings,sub_folder='/#ClusterCollages')
-		settings["folder_name"]=settings["name"]
-	else:
-		if not os.path.exists(f'__0utput__/{replace_forbidden_symbols(settings["folder_name"])}/#ClusterCollages/'):
-			os.makedirs(f'__0utput__/{replace_forbidden_symbols(settings["folder_name"])}/#ClusterCollages/')
-		save_settings(settings["folder_name"],settings,sub_folder='/#ClusterCollages')
 
 	#Configures steps and scale lists
 	if type(settings["steps"])==list:
@@ -481,6 +495,13 @@ def render_loop(settings,eval_guard=True,only_gen_path=False):
 	else:
 		settings["seed"]=4246521898
 
+	if settings["folder_name"]=="":
+		folder=settings["name"]
+		save_settings(folder,settings)
+		settings["folder_name"]=folder
+	else:
+		save_settings(settings["folder_name"],settings)
+
 	#Adjusts all other needed parameters and adds the task
 	QUEUED_IMAGES+=number_of_imgs
 	settings["number_of_imgs"]=number_of_imgs
@@ -496,13 +517,11 @@ def render_loop(settings,eval_guard=True,only_gen_path=False):
 	PROCESSING_QUEUE.append(settings)
 
 def render_loop_process(settings):
-	save_settings(settings["folder_name"],settings)
+	global FINISHED_TASKS
 	imgs=[]
 	img_settings=copy.deepcopy(settings)
 
 	img_settings["folder_name_extra"]=''
-	if settings["folder_name"]=="":
-		img_settings["folder_name"]=settings["name"]
 	rendered_imgs=1
 	for n in settings["quantity"]:
 		enumerator=f'''({img_settings["seed"]})(#{str((n+1)).rjust(4,'0')})'''
@@ -535,6 +554,7 @@ def render_loop_process(settings):
 		FUTURES.append(EXECUTOR.submit(make_vid,settings['name'],fps=BASE_FPS))
 	elif settings['video'] == 'interpolated':
 		FUTURES.append(EXECUTOR.submit(make_interpolated_vid,settings['name'],fps=BASE_FPS,factor=FF_FACTOR,output_mode=FF_OUTPUT_MODE))
+	FINISHED_TASKS+=1
 	return imgs
 
 ###
