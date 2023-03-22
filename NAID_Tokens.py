@@ -91,10 +91,9 @@ OTHER_LIST=[
 ["⊹",2],
 ["☄",2],
 ["æ",1],
-["♡",1/2],
 ]
 
-HEARTS=[
+HEARTS=[#♥❤♡❣❥❦❧
 ["♥",1/4],#Black Heart Suit
 ["❤",1/4],#Heavy Black Heart
 ["♡",1/2],#White Heart Suit
@@ -104,10 +103,10 @@ HEARTS=[
 ["❧",2],#Rotated Floral Heart Bullet
 ]
 
-HEART_EMOJIS=[
+HEART_EMOJIS=[#💔💗💖💕♥️💓💟💝💘💞❣️🫀
+["💔",1/2],#Broken Heart
 ["💗",1/2],#Growing Heart
 ["💖",1/2],#Sparkling Heart
-["💔",1/2],#Broken Heart
 ["💕",1/2],#Two Hearts
 ["♥️",1/2],#Heart Suit
 ["💓",1],#Beating Heart
@@ -119,7 +118,7 @@ HEART_EMOJIS=[
 ["🫀",3],#Anatomical Heart
 ]
 
-COLORED_HEART_EMOJIS=[
+COLORED_HEART_EMOJIS=[#❤️💙💚💜💛🧡🖤🤍🤎
 ["❤️",1/4],#Red Heart
 ["💙",1/2],#Blue Heart
 ["💚",1/2],#Green Heart
