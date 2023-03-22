@@ -51,3 +51,23 @@ I also have a discord server where I organize all my AI image generation endeavo
 -Fixed an issue with superfluous information in saved settings  
 -Fixed an issue with saved cluster collage settings, seeds wouldn't be replaced correctly, requiring manual adjustment  
 -Fixed task counter for render loops  
+
+### Version 3
+#### Added Features/Changes
+-Addition of a Kivy GUI
+-f-string support in cluster collages
+-Support for multiple samplers in cluster collages
+-Improved fallback font writer for cluster collages
+-Unified handling of scales/steps for cluster collages and image sequences
+-Revamped configuration handling
+-Deprecated the old way of handling QT/UC in favor of prompt chunks
+
+#### Breaking Changes
+-Image sequence quantity is now saved as a two int list instead of range to work with literal_eval
+-nai_smea and nai_smea_dyn are deprecated names for the accordingly adjusted k_euler_ancestral sampler with SMEA/Dyn (the API is addressed with two bools, but the script now uses _smea or _dyn as suffixes for all qualifying samplers)
+-f-string formatting has been substantially changed to make it work with the UI
+
+#### Known Issues
+-GenerationZone.py is in disrepair for now and needs an update in the future  
+-The way the console in the UI is proned causes markup error messages and may discolor the first messages  
+-Backspaces in evaluated parts of prompts do not work properly, this is an issue with Python that will be fixed in 3.12, until then a BS constant is available  
