@@ -46,6 +46,11 @@ SEED_LISTS = [
 ]
 
 USER_RESOLUTIONS = {
+	'Max':{
+		'PortraitMax': {'width':1408, 'height':2112},
+		'LandscapeMax': {'width':2112, 'height':1408},
+		'SquareMax': {'width':1728, 'height':1728},
+	},
 	'Dakimakura1|3':{
 		'Dakimakura1/3': {'width':384, 'height':1024},
 		'Dakimakura1/3+': {'width':576, 'height':1536},
@@ -78,17 +83,19 @@ NAI_UCS=[
 ]
 
 #This is the list of available NAI samplers
-NAI_SAMPLERS_RAW=['k_dpmpp_2m', 'k_euler_ancestral', 'k_euler', 'k_dpm_2', 'k_dpmpp_2s_ancestral', 'k_dpmpp_sde', 'k_dpm_fast', 'ddim', 'plms', 'k_lms',]
+NAI_SAMPLERS_RAW=['k_dpmpp_2m', 'k_euler_ancestral', 'k_heun', 'k_euler', 'k_dpm_2', 'k_dpm_2_ancestral', 'k_dpmpp_2s_ancestral', 'k_dpmpp_sde', 'k_dpm_fast', 'k_dpm_adaptive', 'ddim', 'k_lms',]
 NAI_SAMPLERS=[
-{'name': 'DPM++ 2m | Converging', 'string': 'k_dpmpp_2m, '},
+{'name': 'DPM++ 2M | Converging', 'string': 'k_dpmpp_2m, '},
 {'name': 'Euler Ancestral | Diverging', 'string': 'k_euler_ancestral, '},
+{'name': 'Heun', 'string': 'k_heun, '},
 {'name': 'Euler', 'string': 'k_euler, '},
 {'name': 'DPM2', 'string': 'k_dpm_2, '},
+{'name': 'DPM2 Ancestral', 'string': 'k_dpm_2_ancestral, '},
 {'name': 'DPM++ 2S Ancestral', 'string': 'k_dpmpp_2s_ancestral, '},
 {'name': 'DPM++ SDE', 'string': 'k_dpmpp_sde, '},
 {'name': 'DPM Fast', 'string': 'k_dpm_fast, '},
+{'name': 'DPM Adaptive', 'string': 'k_dpm_adaptive, '},
 {'name': 'DDIM', 'string': 'ddim, '},
-{'name': 'PLMS', 'string': 'plms, '},
 {'name': 'K-LMS | Deprecated, inefficient, glitchy', 'string': 'k_lms, '},
 ]
 
@@ -117,8 +124,8 @@ NAI_RESOLUTIONS={
 		'SquareLarge+': {'width':1472,'height':1472},
 	},
 	'Landscape':{
-		'LandscapeWallpaper': {'width':1088,'height':1920},
-		'PortraitWallpaper': {'width':1920,'height':1088},
+		'LandscapeWallpaper': {'width':1920,'height':1088},
+		'PortraitWallpaper': {'width':1088,'height':1920},
 	},
 }""",
 	'3.Theme':

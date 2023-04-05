@@ -11,19 +11,29 @@ class CLIPCostCalculator:
 		return len(tokens)
 clip_calculator = CLIPCostCalculator()
 
-# This block is specifically needed to address Windows DPI issues
-import ctypes
-# Query DPI Awareness (Windows 10 and 8)
-awareness = ctypes.c_int()
-errorCode = ctypes.windll.shcore.GetProcessDpiAwareness(0, ctypes.byref(awareness))
-#print(awareness.value)
-# Set DPI Awareness  (Windows 10 and 8)
-errorCode = ctypes.windll.shcore.SetProcessDpiAwareness(2)
-# the argument is the awareness level, which can be 0, 1 or 2:
-# for 1-to-1 pixel control I seem to need it to be non-zero (I'm using level 2)
-# Set DPI Awareness  (Windows 7 and Vista)
-success = ctypes.windll.user32.SetProcessDPIAware()
-#And in order to get proper scaling:
+from sys import platform
+if platform == 'win32' or platform == 'cygwin':
+	OS = 'Win'
+	# This block is specifically needed to address Windows DPI issues
+	import ctypes
+	# Query DPI Awareness (Windows 10 and 8)
+	awareness = ctypes.c_int()
+	errorCode = ctypes.windll.shcore.GetProcessDpiAwareness(0, ctypes.byref(awareness))
+	#print(awareness.value)
+	# Set DPI Awareness  (Windows 10 and 8)
+	errorCode = ctypes.windll.shcore.SetProcessDpiAwareness(2)
+	# the argument is the awareness level, which can be 0, 1 or 2:
+	# for 1-to-1 pixel control I seem to need it to be non-zero (I'm using level 2)
+	# Set DPI Awareness  (Windows 7 and Vista)
+	success = ctypes.windll.user32.SetProcessDPIAware()
+elif sys.platform.startswith('linux'):
+	OS = 'Linux'
+elif platform == 'darwin':
+	OS = 'Mac'
+
+
+
+
 from kivy.metrics import Metrics
 Metrics.density = 1
 
@@ -40,6 +50,7 @@ import json
 import ast
 import time
 import re
+import itertools
 from kivy.uix.popup import Popup
 from kivy.app import App
 from kivy.core.window import Window
@@ -413,88 +424,78 @@ class SeedGrid(GridLayout):
 	def __init__(self, **kwargs):
 		super(SeedGrid, self).__init__(**kwargs)
 		self.cols=2
-		self.seed_cols=3
-		self.seed_rows=3
 		self.seed_inputs = []
 		self.cc_seed_grid = GridLayout(cols=3, size_hint=(1, 1), size=(100, field_height*4))
-		self.btn1 = Button(text='Column+', size_hint=(None, None), size=(100, field_height), **button_colors)
-		self.btn1.bind(on_release=lambda btn: self.on_increase_cols())
-		self.btn2 = Button(text='Column-', size_hint=(None, None), size=(100, field_height), **button_colors)
-		self.btn2.bind(on_release=lambda btn: self.on_decrease_cols())
-		self.btn3 = Button(text='Row+', size_hint=(None, None), size=(100, field_height), **button_colors)
-		self.btn3.bind(on_release=lambda btn: self.on_increase_rows())
-		self.btn4 = Button(text='Row-', size_hint=(None, None), size=(100, field_height), **button_colors)
-		self.btn4.bind(on_release=lambda btn: self.on_decrease_rows())
-		self.btn5 = Button(text='Randomize', size_hint=(None, None), size=(100, field_height), **button_colors)
-		self.btn5.bind(on_release=lambda btn: self.randomize())
-		self.btn6 = Button(text='Load List', size_hint=(None, None), size=(100, field_height), **button_colors)
 		
+		self.seed_cols_input = ScrollInput(text='3', size_hint=(1, None), width=60, height=field_height, **input_colors)
+		self.seed_rows_input = ScrollInput(text='3', size_hint=(1, None), width=60, height=field_height, **input_colors)
+		self.seed_mult_label = Label(text='×', size_hint=(None, None), width=20, height=field_height)
+		self.dim_input_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=field_height)
+		self.dim_input_layout.add_widget(self.seed_cols_input)
+		self.dim_input_layout.add_widget(self.seed_mult_label)
+		self.dim_input_layout.add_widget(self.seed_rows_input)
+		self.seed_cols_input.bind(text=self.adjust_grid_size)
+		self.seed_rows_input.bind(text=self.adjust_grid_size)
+
+		self.btn1 = Button(text='Randomize', size_hint=(None, None), size=(100, field_height), **button_colors)
+		self.btn1.bind(on_release=lambda btn: self.randomize())
+		self.btn2 = Button(text='Clear', size_hint=(None, None), size=(100, field_height), **button_colors)
+		self.btn2.bind(on_release=lambda btn: self.clear())
+		self.btn3 = Button(text='Load List', size_hint=(None, None), size=(100, field_height), **button_colors)
+
+		# create label for the multiplication sign between width and height
 		self.seed_list_dropdown = DropDown()
-		self.btn6.bind(on_release=self.seed_list_dropdown.open)
+		self.btn3.bind(on_release=self.seed_list_dropdown.open)
 		for seed_list in SEED_LISTS:
 			btn = Button(text=seed_list["name"], size_hint_y=None, height=field_height, **dp_button_colors)
 			btn.bind(on_release=lambda btn, seed_list=seed_list: (self.load_seeds(seed_list["seeds"]), self.seed_list_dropdown.dismiss()))
 			self.seed_list_dropdown.add_widget(btn)
 		
-		
 		self.btn_grid = GridLayout(cols=1, size_hint=(None, 1))
+		self.btn_grid.add_widget(self.dim_input_layout)
 		self.btn_grid.add_widget(self.btn1)
 		self.btn_grid.add_widget(self.btn2)
 		self.btn_grid.add_widget(self.btn3)
-		self.btn_grid.add_widget(self.btn4)
-		self.btn_grid.add_widget(self.btn5)
-		self.btn_grid.add_widget(self.btn6)
 
-		for i in range(3):
-			for j in range(3):
-				seed_input = ScrollInput(text='', min_value=0, max_value=4294967295, multiline=False, **input_colors, font_size=font_small, allow_empty=True)
-				self.seed_inputs.append(seed_input)
-				self.cc_seed_grid.add_widget(seed_input)
 		self.add_widget(self.btn_grid)
 		self.add_widget(self.cc_seed_grid)
 		
-	def adjust_grid_size(self, rows, cols):
-		self.seed_rows = rows
-		self.seed_cols = cols
-		self.seed_inputs.clear()
-		self.cc_seed_grid.clear_widgets()
-		self.cc_seed_grid.cols=cols
-		for i in range(rows):
-			for j in range(cols):
-				seed_input = ScrollInput(text='', min_value=0, max_value=4294967295, multiline=False, **input_colors, font_size=font_small, allow_empty=True)
-				self.seed_inputs.append(seed_input)
-				self.cc_seed_grid.add_widget(seed_input)
+		self.adjust_grid_size()
+		
+	def adjust_grid_size(self, instance=None, text=None):
+		if self.seed_rows_input.text == '' or self.seed_cols_input.text == '':
+			return
+		# calculate the number of rows and columns needed to fit all the inputs
+		num_inputs = int(self.seed_rows_input.text) * int(self.seed_cols_input.text)
+
+		# adjust the size of the grid
+		self.cc_seed_grid.cols = int(self.seed_cols_input.text)
+
+		# remove any excess input widgets
+		while len(self.seed_inputs) > num_inputs:
+			self.cc_seed_grid.remove_widget(self.seed_inputs.pop())
+
+		# add any missing input widgets
+		while len(self.seed_inputs) < num_inputs:
+			seed_input = ScrollInput(text='', min_value=0, max_value=4294967295, multiline=False, **input_colors, font_size=font_small, allow_empty=True)
+			self.seed_inputs.append(seed_input)
+			self.cc_seed_grid.add_widget(seed_input)
 
 	def load_seeds(self, seeds):
-		self.adjust_grid_size(len(seeds), len(seeds[0]))
-		for i in range(len(seeds)):
-			for j in range(len(seeds[i])):
-				self.seed_inputs[j+i*self.seed_cols].text = str(seeds[i][j])
-
-	def on_increase_rows(self):
-		rows = min(self.seed_rows + 1,25)
-		cols = self.seed_cols
-		self.adjust_grid_size(rows, cols)
-
-	def on_decrease_rows(self):
-		rows = max(self.seed_rows - 1,1)
-		cols = self.seed_cols
-		self.adjust_grid_size(rows, cols)
-
-	def on_increase_cols(self):
-		rows = self.seed_rows
-		cols = min(self.seed_cols + 1,25)
-		self.adjust_grid_size(rows, cols)
-
-	def on_decrease_cols(self):
-		rows = self.seed_rows
-		cols = max(self.seed_cols - 1,1)
-		self.adjust_grid_size(rows, cols)
+		self.seed_rows_input.text, self.seed_cols_input.text = str(len(seeds)), str(len(seeds[0]))
+		self.adjust_grid_size()
+		for seed_input, value in zip(self.seed_inputs, itertools.chain(*seeds)):
+			seed_input.text = str(value)
 
 	def randomize(self):
 		for widget in self.cc_seed_grid.children:
 			if isinstance(widget, TextInput):
 				widget.text = str(generate_seed())
+
+	def clear(self):
+		for widget in self.cc_seed_grid.children:
+			if isinstance(widget, TextInput):
+				widget.text = ''
 
 # PromptGrid class for the use of f-strings in prompting
 class PromptGrid(GridLayout):
@@ -668,9 +669,6 @@ class ComboCappedScrollInput(ScrollInput):
 		if not value:
 			# User has left the field
 			try:
-				if value == False:
-					self.text = str(self.min_value)
-					return
 				value = self.fi_mode(self.text)
 				if value*int(self.paired_field.text)>3145728:
 					value = int(3145728 / int(self.paired_field.text))
@@ -706,9 +704,8 @@ class ResolutionSelector(BoxLayout):
 		# Create width and height input fields for custom resolution
 		self.resolution_width = ComboCappedScrollInput(text='640', increment=64, min_value=64, max_value=49152,
 													 size_hint=(1, None), width=60, height=field_height, **input_colors)
-		self.resolution_height = ComboCappedScrollInput(paired_field=self.resolution_width, text='640', increment=64,
-													  min_value=64, max_value=49152, size_hint=(1, None), width=60,
-													  height=field_height, **input_colors)
+		self.resolution_height = ComboCappedScrollInput(text='640', increment=64, min_value=64, max_value=49152, paired_field=self.resolution_width, 
+													  size_hint=(1, None), width=60, height=field_height, **input_colors)
 		self.resolution_width.paired_field = self.resolution_height
 
 		# create label for the multiplication sign between width and height
@@ -908,6 +905,11 @@ class ImageGeneratorTasker(App):
 
 	# Function to enable file dropping
 	def _on_file_drop(self, window, file_path, x, y):
+		import win32api
+		import win32con
+		import win32gui
+		hwnd = win32gui.GetActiveWindow()
+		win32api.SendMessage(hwnd, win32con.WM_USER + 10, 50, 0)
 		file_path=file_path.decode()
 		# Check if file is a python file or image
 		try:
@@ -949,10 +951,16 @@ class ImageGeneratorTasker(App):
 					if self.uc_import.enabled:
 						if type(settings["UC"])!=str:
 							self.uc_f.enabled = True
-							self.uc_f_input.load_prompts(settings["UC"])
+							if settings.get('negative_prompt'):
+								self.uc_f_input.load_prompts(settings["negative_prompt"])
+							else:
+								self.uc_f_input.load_prompts(settings["UC"])
 						else:
 							self.uc_f.enabled = False
-							self.uc_input.text = settings["UC"]
+							if settings.get('negative_prompt'):
+								self.uc_input.text = settings["negative_prompt"]
+							else:
+								self.uc_input.text = settings["UC"]
 
 					if settings.get('collage_dimensions'):
 						self.mode_switcher.switch_cc('')
@@ -1000,13 +1008,14 @@ class ImageGeneratorTasker(App):
 					}
 				comment_dict = json.loads(metadata["info"]["Comment"])
 				if self.name_import.enabled: self.name_input.text = os.path.splitext(os.path.basename(file_path))[0]
-				if self.folder_name_import.enabled: self.folder_name_input.text = os.path.dirname(file_path)
+				# Should be refactored to folder_name_user if at all
+				#if self.folder_name_import.enabled: self.folder_name_input.text = os.path.dirname(file_path)
 				if self.model_import.enabled:
-					if metadata["info"]["Source"] == 'Stable Diffusion 1D09D794':
+					if metadata["info"]["Source"] == 'Stable Diffusion 1D09D794' or metadata["info"]["Source"] == 'Stable Diffusion F64BA557': # v1.2/1.3 
 						self.model_button.text = 'nai-diffusion-furry'
-					elif metadata["info"]["Source"] == 'Stable Diffusion 81274D13':
+					elif metadata["info"]["Source"] == 'Stable Diffusion 81274D13' or metadata["info"]["Source"] == 'Stable Diffusion 3B3287AF': # Initial release/silent update with ControlNet
 						self.model_button.text = 'nai-diffusion'
-					elif metadata["info"]["Source"] == 'Stable Diffusion 1D44365E':
+					elif metadata["info"]["Source"] == 'Stable Diffusion 1D44365E' or metadata["info"]["Source"] == 'Stable Diffusion F4D50568': # Initial release/silent update with ControlNet
 						self.model_button.text = 'safe-diffusion'
 					else:
 						print(f'Error while determining model, defaulting to Full')
@@ -1016,17 +1025,31 @@ class ImageGeneratorTasker(App):
 				if self.resolution_import.enabled: 
 					self.resolution_selector.resolution_width.text = str(metadata["size"][0])
 					self.resolution_selector.resolution_height.text = str(metadata["size"][1])
-				if self.is_sampler_import.enabled: self.is_sampler_button.text = str(comment_dict["sampler"])
 				if self.is_seed_import.enabled: self.is_seed_input.text = str(comment_dict["seed"])
-				if comment_dict["sm_dyn"]:
-					self.is_sampler_smea.enabled = True
-					self.is_sampler_dyn.enabled = True
-				elif comment_dict["sm"]:
-					self.is_sampler_smea.enabled = True
-					self.is_sampler_dyn.enabled = False
-				else:
-					self.is_sampler_smea.enabled = False
-					self.is_sampler_dyn.enabled = False
+				
+				if self.is_sampler_import.enabled:
+					sampler_string = str(comment_dict["sampler"])
+					if sampler_string == 'nai_smea_dyn':
+						self.is_sampler_button.text = 'k_euler_ancestral'
+						self.is_sampler_smea.enabled = True
+						self.is_sampler_dyn.enabled = True
+					elif sampler_string == 'nai_smea':
+						self.is_sampler_button.text = 'k_euler_ancestral'
+						self.is_sampler_smea.enabled = True
+						self.is_sampler_dyn.enabled = False
+					else:
+						self.is_sampler_button.text = sampler_string
+						if comment_dict.get('sm_dyn'):
+							if comment_dict["sm_dyn"]:
+								self.is_sampler_smea.enabled = True
+								self.is_sampler_dyn.enabled = True
+						elif comment_dict.get('sm'):
+							if comment_dict["sm"]:
+								self.is_sampler_smea.enabled = True
+								self.is_sampler_dyn.enabled = False
+						else:
+							self.is_sampler_smea.enabled = False
+							self.is_sampler_dyn.enabled = False
 				if self.prompt_import.enabled:
 					self.prompt_f.enabled = False
 					self.prompt_input.text = str(metadata["info"]["Description"])
@@ -1271,84 +1294,95 @@ class ImageGeneratorTasker(App):
 		cancel_buttons_layout.add_widget(self.wipe_queue_button)
 		cancel_buttons_layout.add_widget(self.cancel_button)
 
-		# Add all elements to layout
-		layout = GridLayout(cols=3)
-		layout.add_widget(mode_label)
-		layout.add_widget(settings_button)
-		layout.add_widget(self.mode_switcher)
+		# Add all elements to layout, which is the primary block for interactions on the left, split into the label/button/input columns
+		input_layout = GridLayout(cols=3)
+		input_layout.add_widget(mode_label)
+		input_layout.add_widget(settings_button)
+		input_layout.add_widget(self.mode_switcher)
 
-		layout.add_widget(name_label)
-		layout.add_widget(self.name_import)
-		layout.add_widget(self.name_input)
+		input_layout.add_widget(name_label)
+		input_layout.add_widget(self.name_import)
+		input_layout.add_widget(self.name_input)
 
-		layout.add_widget(folder_name_label)
-		layout.add_widget(self.folder_name_import)
-		layout.add_widget(self.folder_name_input)
+		input_layout.add_widget(folder_name_label)
+		input_layout.add_widget(self.folder_name_import)
+		input_layout.add_widget(self.folder_name_input)
 
-		layout.add_widget(enumerator_plus_label)
-		layout.add_widget(self.enumerator_plus_import)
-		layout.add_widget(self.enumerator_plus_input)
+		#input_layout.add_widget(enumerator_plus_label)
+		#input_layout.add_widget(self.enumerator_plus_import)
+		#input_layout.add_widget(self.enumerator_plus_input)
 
-		layout.add_widget(self.model_label)
-		layout.add_widget(self.model_import)
-		layout.add_widget(self.model_button)
+		input_layout.add_widget(self.model_label)
+		input_layout.add_widget(self.model_import)
+		input_layout.add_widget(self.model_button)
 
-		layout.add_widget(cc_seed_label)
-		layout.add_widget(self.cc_seed_import)
-		layout.add_widget(self.cc_seed_grid)
+		input_layout.add_widget(cc_seed_label)
+		input_layout.add_widget(self.cc_seed_import)
+		input_layout.add_widget(self.cc_seed_grid)
 
-		layout.add_widget(is_seed_label)
-		layout.add_widget(self.is_seed_import)
-		layout.add_widget(is_seed_layout)		
+		input_layout.add_widget(is_seed_label)
+		input_layout.add_widget(self.is_seed_import)
+		input_layout.add_widget(is_seed_layout)		
 
-		layout.add_widget(steps_label)
-		layout.add_widget(self.steps_import)
-		layout.add_widget(steps_layout)	
+		input_layout.add_widget(steps_label)
+		input_layout.add_widget(self.steps_import)
+		input_layout.add_widget(steps_layout)	
 
-		layout.add_widget(scale_label)
-		layout.add_widget(self.scale_import)
-		layout.add_widget(scale_layout)
+		input_layout.add_widget(scale_label)
+		input_layout.add_widget(self.scale_import)
+		input_layout.add_widget(scale_layout)
 
-		layout.add_widget(cc_sampler_label)
-		layout.add_widget(self.cc_sampler_import)
-		layout.add_widget(cc_sampler_layout)
+		input_layout.add_widget(cc_sampler_label)
+		input_layout.add_widget(self.cc_sampler_import)
+		input_layout.add_widget(cc_sampler_layout)
 
-		layout.add_widget(is_sampler_label)
-		layout.add_widget(self.is_sampler_import)
-		layout.add_widget(is_sampler_layout)		
+		input_layout.add_widget(is_sampler_label)
+		input_layout.add_widget(self.is_sampler_import)
+		input_layout.add_widget(is_sampler_layout)		
 
-		layout.add_widget(resolution_label)
-		layout.add_widget(self.resolution_import)
-		layout.add_widget(self.resolution_selector)
+		input_layout.add_widget(resolution_label)
+		input_layout.add_widget(self.resolution_import)
+		input_layout.add_widget(self.resolution_selector)
 
-		layout.add_widget(prompt_label)
-		layout.add_widget(prompt_buttons_layout)
-		layout.add_widget(prompt_layout)
+		input_layout.add_widget(prompt_label)
+		input_layout.add_widget(prompt_buttons_layout)
+		input_layout.add_widget(prompt_layout)
 
-		layout.add_widget(uc_label)
-		layout.add_widget(uc_buttons_layout)
-		layout.add_widget(uc_layout)
+		input_layout.add_widget(uc_label)
+		input_layout.add_widget(uc_buttons_layout)
+		input_layout.add_widget(uc_layout)
 
-		layout.add_widget(cc_dim_label)
-		layout.add_widget(self.cc_dim_import)
-		layout.add_widget(cc_dim_layout)
+		input_layout.add_widget(cc_dim_label)
+		input_layout.add_widget(self.cc_dim_import)
+		input_layout.add_widget(cc_dim_layout)
 
-		layout.add_widget(is_range_label)
-		layout.add_widget(self.is_range_import)
-		layout.add_widget(is_range_layout)
+		input_layout.add_widget(is_range_label)
+		input_layout.add_widget(self.is_range_import)
+		input_layout.add_widget(is_range_layout)
 
-		layout.add_widget(action_buttons_label)
-		layout.add_widget(Label(text='',size_hint=(None, None),size=(0,0)))
-		layout.add_widget(action_buttons_layout)
+		input_layout.add_widget(action_buttons_label)
+		input_layout.add_widget(Label(text='',size_hint=(None, None),size=(0,0)))
+		input_layout.add_widget(action_buttons_layout)
 
-		layout.add_widget(cancel_buttons_label)
-		layout.add_widget(Label(text='',size_hint=(None, None),size=(0,0)))
-		layout.add_widget(cancel_buttons_layout)
+		input_layout.add_widget(cancel_buttons_label)
+		input_layout.add_widget(Label(text='',size_hint=(None, None),size=(0,0)))
+		input_layout.add_widget(cancel_buttons_layout)
 
-		self.super_layout = BoxLayout(orientation='horizontal')
-		self.super_layout.add_widget(layout)
-		self.super_layout.add_widget(Console(size_hint=(0.6, 1)))
+		# The super_layout is highest layout in the hierarchy and this also the one that is returned.
+		# It has the user interaction section left, the console/metadata section in the middle, and the image preview on the right
+		
+		console = Console()
+		
+		task_counter_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=field_height)
+		
+		meta_layout = BoxLayout(orientation='vertical', size_hint=(0.5, 1))
+		meta_layout.add_widget(console)
+		
 		self.preview = ImagePreview()
+		
+		self.super_layout = BoxLayout(orientation='horizontal')
+		self.super_layout.add_widget(input_layout)
+		self.super_layout.add_widget(meta_layout)
 		self.super_layout.add_widget(self.preview)
 
 		self.cc_exclusive_widgets = [cc_seed_label,self.cc_seed_grid,cc_sampler_label,cc_sampler_layout,cc_dim_label,cc_dim_layout,
@@ -1379,8 +1413,14 @@ class ImageGeneratorTasker(App):
 		img_mode = {'width': int(self.resolution_selector.resolution_width.text),
 								'height': int(self.resolution_selector.resolution_height.text)}
 		if self.prompt_f.enabled:
+			if self.prompt_f_input.prompt_inputs[0].text == '':
+				print("Prompt field can't be empty! Task not added.")
+				return
 			prompt = [['f"""' + self.prompt_f_input.prompt_inputs[i].text + '"""'] for i in range(self.prompt_f_input.prompt_rows)]
 		else:
+			if self.prompt_input.text == '':
+				print("Prompt field can't be empty! Task not added.")
+				return
 			prompt = self.prompt_input.text
 		if self.uc_f.enabled:
 			uc = [['f"""' + self.uc_f_input.prompt_inputs[i].text + '"""'] for i in range(self.uc_f_input.prompt_rows)]
@@ -1391,15 +1431,18 @@ class ImageGeneratorTasker(App):
 		'prompt': prompt, 'UC': uc}
 
 		if self.mode_switcher.cc_active: # Cluster collage specific settings
-			seeds = [[self.cc_seed_grid.seed_inputs[j+i*self.cc_seed_grid.seed_cols].text for j in range(self.cc_seed_grid.seed_cols)] for i in range(self.cc_seed_grid.seed_rows)]
+			seeds = [[self.cc_seed_grid.seed_inputs[j+i*int(self.cc_seed_grid.seed_cols_input.text)].text for j in range(int(self.cc_seed_grid.seed_cols_input.text))] for i in range(int(self.cc_seed_grid.seed_rows_input.text))]
 			seed = [[str(generate_seed()) if value == '' else value for value in inner_list] for inner_list in seeds]
+			if self.cc_sampler_input.text == '':
+				print("Sampler field can't be empty! Task not added.")
+				return
 			if self.cc_sampler_input.text.__contains__(','):
 				sampler = [list(filter(None, self.cc_sampler_input.text.split(", "))),'']
 			else:
 				sampler = self.cc_sampler_input.text
 			collage_dimensions = [int(self.cc_dim_width.text), int(self.cc_dim_height.text)]
 			settings.update({'seed': seed, 'sampler': sampler, 'collage_dimensions': collage_dimensions})
-			prompt_stabber(settings, only_gen_path=False)
+			prompt_stabber(settings, img_save_mode='Resume')
 		else: # Image sequence specific settings
 			if not self.is_seed_input.text == '':
 				seed = self.is_seed_input.text
@@ -1416,7 +1459,7 @@ class ImageGeneratorTasker(App):
 			else:
 				video = ''
 			settings.update({'seed': int(seed), 'sampler': sampler, 'quantity': quantity, 'video': video, 'FPS': int(self.is_fps.text)})
-			render_loop(settings, only_gen_path=False)
+			render_loop(settings, img_save_mode='Resume')
 		print(settings)
 	def generate_single_image(self, instance):
 		self.single_img_button.disabled = True
