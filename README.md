@@ -23,36 +23,6 @@ This tool is and will remain completely free to use, but if you could spare a bi
 I also have a discord server where I organize all my AI image generation endeavors including using this and other tools to try and gain a deeper understanding for certain characteristics of NAID, where we can share our results and so on: https://discord.gg/xJTwDVBa5b (again, NSFW/18+ warning)
 
 ## Change Log
-### Version 2
-#### Added Features/Changes
--A proper task queue  
---Previously tasks from GenerationZone.py would be processed one by one as they come in, and metadata was a little lacking. Particularly when processing long lists of tasks and stopping midway this was an issue as those lists would've had to be manually adjusted. Nor was it clear how long the script might still be running. Now all tasks are first collected in a list (deque actually) and metadata about the queue is calculated. The script will then display the exact location of the current rendering image in the list (Current Task/Total Tasks | Current Task Image/Total Task Images | Current Total Image/Total Images). The function process_queue() now starts the actual processing, and accepts an integer with the number of tasks to skip. Finished rendering 10 tasks but got interrupted? process_queue(10) will get you right back on track.  
--Improved cluster collage headers  
---The previous state of cluster collage headers was barely workable, with the main issue being that many symbols wouldn't render properly. This has been fixed by implementing a rigorous system to render any written character with the first font of an arbitrarily long list. A number of standard fonts has been provided which should cover most emojis, unicode symbols as well as Asian languages. Should you require the ability to render any symbols that aren't covered by the provided fonts you can simply add your own, which can also overwrite the default fonts if desired. While there is no single "Everything Font" you can effectively build your own universally robust font by adding fallback fonts as needed. For languages I'd recommend a look at Google Noto, which is also used for providing emoji and CJK support.  
-(Known issue: There's a couple outliers like the "Red Heart Emoji" `❤️` that may render incorrectly and show weird behavior... because it's actually a combined symbol. I probably could fix this issue too, but I didn't want to bother with Variation Selector-16 and its problems so far.)  
---The previous text wrapping functionality was barebones, and this has been addressed too. Now the header should always be cleanly readable, properly spaced, and just as big as it has to be. Some bugs may remain, and using a huge font wouldn't do you favors either.  
--Multithreading  
---Since the changes to the collage generation substantially increase the workload, the brunt of their creation, as well as the creation of videos which already was a little slower, will now be performed in separate threads so the image generation will proceed without interruption.  
-#### Bug Fixes
--Switched settings encoding to UTF-16 to prevent corruption of characters like `🤎` which is the "Brown Heart Emoji".
-
-### Version 2.1
-#### Added Features/Changes
--Streamlined the fallback font writing system further  
--Added an experimental way to manually adjust cluster collage folder structure further  
--Changed the function definition order to place related functions closer together  
-#### Bug Fixes
--Fixed a few cluster collage header bugs
-
-### Version 2.2
-#### Added Features/Changes
--Added detection for invalid access tokens  
--Improved formatting of saved settings to streamline their appearance and usability  
-#### Bug Fixes
--Fixed an issue with superfluous information in saved settings  
--Fixed an issue with saved cluster collage settings, seeds wouldn't be replaced correctly, requiring manual adjustment  
--Fixed task counter for render loops  
-
 ### Version 3
 #### Added Features/Changes
 -Addition of a Kivy GUI  
@@ -73,3 +43,20 @@ I also have a discord server where I organize all my AI image generation endeavo
 -GenerationZone.py is in disrepair for now and needs an update in the future  
 -The way the console in the UI is proned causes markup error messages and may discolor the first messages  
 -Backspaces in evaluated parts of prompts do not work properly, this is an issue with Python that will be fixed in 3.12, until then a BS constant is available  
+
+### Version 3.0.1
+#### Added Features/Changes
+-Switched to NAI's new API, which means that sampler PLMS is not available anymore while adding some new ones. There's also a number of other related silent needed changes  
+-Improved `SeedGrid`. Changed handling of grid size to use scrolling inputs and removed the according buttons. Added a clear button to wipe all fields so they will be randomized when adding a task into the queue  
+-Added max variants of Square/Portrait/Landscape resolutions, specified in "1.User_Settings", delete the file or add the values manually if you want them available  
+
+#### Breaking Changes
+-IMPORTANT: "2.NAID_Constants.py" needs to be edited or deleted due to the updated sampler lists and a small issue with Wallpaper resolutions  
+
+#### Bug Fixes
+-Fixed import of files with sampler defined as nai_smea or nai_smea_dyn  
+-Fixed some possibly malformed settings being queued (empty CC sampler field or prompt)  
+-Fixed a bug that would reset resolution values to their min value when entering the text field and leaving it  
+-Fixed an issue where not accepting steps/scale lists with single images might cause settings with two different steps/scale values to fail. Lists are now accepted even if only 1 value is needed  
+-Fixed the Landscape/Portrait Wallpaper resolutions  
+-Fixed Furry v1.3 not being correctly detected  
