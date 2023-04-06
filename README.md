@@ -41,8 +41,9 @@ I also have a discord server where I organize all my AI image generation endeavo
 
 #### Known Issues
 -GenerationZone.py is in disrepair for now and needs an update in the future  
--The way the console in the UI is proned causes markup error messages and may discolor the first messages  
+-The way the console in the UI is pruned causes markup error messages and may discolor the first messages  
 -Backspaces in evaluated parts of prompts do not work properly, this is an issue with Python that will be fixed in 3.12, until then a BS constant is available  
+-Decrisper settings aren't properly saved into .py files and aren't displayed on cluster collages yet  
 
 ### Version 3.0.1
 #### Added Features/Changes
@@ -60,3 +61,17 @@ I also have a discord server where I organize all my AI image generation endeavo
 -Fixed an issue where not accepting steps/scale lists with single images might cause settings with two different steps/scale values to fail. Lists are now accepted even if only 1 value is needed  
 -Fixed the Landscape/Portrait Wallpaper resolutions  
 -Fixed Furry v1.3 not being correctly detected  
+
+### Version 3.1
+#### Added Features/Changes
+-Added a pause/play button to halt and resume the processing of tasks  
+-Added a button to adjust whether the program overwrites files at the target location or not  
+-Moved the "cancel processing functionality into a more compact stop button and also moved the "wipe queue" button over below the console to make more space in the main settings area, which is already used by the next feature  
+-Added support for the decrisper/dynamic thresholding (which will support f-strings in a soon-to-come followup update)  
+-Added an awareness check for images that were generated without the model hash properly saved, warning the user when one of them is imported  
+-Improved scrolling inputs further by allowing the increment to be adjusted (increments are multiplied as follows: CTRL → ×10 | SHIFT → ×100 | CTRL+SHIFT → ×1000 | ALT → ÷10 | ALT+CTRL → ÷100 | ALT+SHIFT → ÷1000)  
+
+#### Bug Fixes
+-Fixed a refactoring issue that would case the program to fail when parsing a new token  
+-Fixed capitalization of the font name used as an example in 1.User_Settings.py, you may or may not have to adjust/delete the file  
+-Raised the JPG quality to 90 to prevent overly destructive artifacts in collages (the quality setting will be exposed at a later date)  
