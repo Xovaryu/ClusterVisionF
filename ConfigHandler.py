@@ -19,7 +19,7 @@ FF_OUTPUT_MODE = 2
 
 #Settings for cluster collages
 CREATOR_NAME = ''
-CC_SEEDS_FONT = ['/Fonts/kanit-black.ttf',29]
+CC_SEEDS_FONT = ['/Fonts/Kanit-Black.ttf',29]
 #If needed you can specify a custom font list that will be loaded before the provided fonts
 CUSTOM_FONT_LIST_PREPEND = []#Add fonts to be prioritized over the default
 CUSTOM_FONT_LIST_APPEND = []#Add fonts that will be used as a fallback if all others fail
@@ -73,6 +73,7 @@ USER_UCS = [
 	'2.NAID_Constants':
 """#The URL to which the requests are sent
 URL='https://api.novelai.net/ai/generate-image'
+URL_ANNOTATE='https://api.novelai.net/ai/annotate-image'
 #This is a list reflecting the online UI UC presets of NAI
 NAI_UCS=[
 {'name': 'Full: Low Quality+Bad Anatomy', 'string': 'nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry, '},

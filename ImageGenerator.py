@@ -35,6 +35,7 @@ EXECUTOR = ThreadPoolExecutor()
 FUTURES = []
 CANCEL_REQUEST = False
 PAUSE_REQUEST = False
+OVERWRITE_IMAGES = False
 BS = '\\' # This is here because f-strings do not yet (until Python 3.12 most likely) support backstrings in the evaluated part, necessitating this BS workaround
 
 #Font list for cluster collages
@@ -80,7 +81,6 @@ def replace_forbidden_symbols(string):
 	return string.replace(':','{Colon}').replace('<','{LesserT}').replace('>','{GreaterT}').replace('|','{VertLine}')
 
 #Takes the settings and reformats them for NAI's API
-#(Using UC presets in the way the website would does not work currently)
 def form_prompt(settings,number=1,noise=0.1,strength=0.4):
 	json_construct={
 		#This is the prompt, Quality Tags are not configured separately and net to be appended here manually
@@ -92,7 +92,7 @@ def form_prompt(settings,number=1,noise=0.1,strength=0.4):
 			#Seed as in UI
 			'seed': settings["seed"],
 			#Undesired Content as in UI
-			'negative_prompt': settings["UC"],
+			'negative_prompt': settings["negative_prompt"],
 			#Image Width as in UI
 			'width': settings["img_mode"]["width"],
 			#Image Height as in UI
@@ -111,12 +111,14 @@ def form_prompt(settings,number=1,noise=0.1,strength=0.4):
 			'strength': strength,
 			'sm': settings["smea"],
 			'sm_dyn': settings["dyn"],
+			'dynamic_thresholding': settings["dynamic_thresholding"],
+			'dynamic_thresholding_mimic_scale': settings["dynamic_thresholding_mimic_scale"],
+			'dynamic_thresholding_percentile': settings["dynamic_thresholding_percentile"],
 			}
 		}
 	return [json_construct,settings["name"]]
 
-def make_file_path(prompt,enumerator,folder_name,folder_name_extra,img_save_mode):
-	if not img_save_mode: print(f'{enumerator}\nModel: {prompt[0]["model"]}\nPrompt:\n{prompt[0]["input"]}\nUC:\n{prompt[0]["parameters"]["negative_prompt"]}')
+def make_file_path(prompt,enumerator,folder_name,folder_name_extra):
 	prompt[1]=replace_forbidden_symbols(prompt[1])
 	folder_name=replace_forbidden_symbols(folder_name)
 	enumerator=replace_forbidden_symbols(enumerator)
@@ -128,8 +130,7 @@ def make_file_path(prompt,enumerator,folder_name,folder_name_extra,img_save_mode
 	return filepath
 
 #The primary function to generate images. Sends the request and will persist until it is fulfilled, then saves the image, and returns the path
-#img_save_mode is a debugging variable and will return only the paths if set to True to avoid repetitive generations
-def image_gen(auth,prompt,filepath,img_save_mode='Resume',token_test=False):
+def image_gen(auth,prompt,filepath,enumerator,token_test=False):
 	global PRODUCED_IMAGES, SKIPPED_IMAGES, WAITS_SHORT, WAITS_LONG, PAUSE_REQUEST
 	while PAUSE_REQUEST:
 		time.sleep(0.2)
@@ -137,8 +138,8 @@ def image_gen(auth,prompt,filepath,img_save_mode='Resume',token_test=False):
 	retry_time=5
 
 	skipped = False
-	while not img_save_mode == 'Skip':
-		if img_save_mode == 'Resume':
+	while True:
+		if not OVERWRITE_IMAGES and not token_test:
 			if os.path.isfile(filepath):
 				skipped = True
 				break
@@ -151,6 +152,7 @@ def image_gen(auth,prompt,filepath,img_save_mode='Resume',token_test=False):
 			elif resp_content == b'{"statusCode":401,"message":"Invalid accessToken."}' or resp_content == b'{"statusCode":400,"message":"Invalid Authorization header content."}':
 				return 'Error'
 		try:
+			print(f'{enumerator}\nModel: {prompt[0]["model"]}\nPrompt:\n{prompt[0]["input"]}\nUC:\n{prompt[0]["parameters"]["negative_prompt"]}')
 			start=time.time()
 			resp=requests.post(URL,json.dumps(prompt[0]),headers={'Authorization': api_header,'Content-Type': 'application/json','accept': 'application/json',})
 			resp_content=resp.content
@@ -163,10 +165,6 @@ def image_gen(auth,prompt,filepath,img_save_mode='Resume',token_test=False):
 			else:
 				print(f'Likely fault detected: {resp_content}')
 			
-			#Deprecated
-			#base64_image=resp_content.splitlines()[2].replace(b"data:", b"")
-			#decoded=base64.b64decode(base64_image)
-			#Check for server load to respect terms. Typical generation times are between 3 and 4 seconds
 			end=time.time()
 			processing_time=end-start
 			print(f'NAI Server Generation Time:{(processing_time)}s')
@@ -177,9 +175,6 @@ def image_gen(auth,prompt,filepath,img_save_mode='Resume',token_test=False):
 							with open(filepath,'wb+') as t:
 								t.write(png_file.read())
 							t.close()
-							#image_data = io.BytesIO(png_file.read())
-							#image = Image.open(image_data)
-			print('`??')
 			break
 		except:
 			return 'Error'
@@ -190,12 +185,8 @@ def image_gen(auth,prompt,filepath,img_save_mode='Resume',token_test=False):
 			continue
 		time.sleep(WAIT_TIME) # Waiting for the specified amount to avoid getting limited
 
-	if not img_save_mode == 'Skip' or skipped:
+	if not skipped:
 		PRODUCED_IMAGES += 1
-		#with open(filepath,'wb+') as t:
-		#	t.write(image_data)
-		#t.close()
-		#image.save(filepath)
 	else:
 		SKIPPED_IMAGES += 1
 	if 'PREVIEW_QUEUE' in globals():
@@ -247,7 +238,7 @@ def save_settings(folder_name,settings,sub_folder=''):
 				file.write(f"{repr(key)}: [")
 				for item in value:
 					# Make sure that f-strings get saved correctly
-					if key == 'prompt' or key == 'UC':
+					if key == 'prompt' or key == 'negative_prompt':
 						for elem in item:
 							file.write(f"""\n{escape_quotes_for_saving(format_double_triple_fstring(elem))},""")
 					# Make sure that seed lists get saved correctly
@@ -376,7 +367,7 @@ def attach_metadata_header(img_collages,settings,name_extra):
 	currently_used_lines=max(currently_used_lines,used_lines_prompt)
 	available_lines = currently_used_lines-used_lines_prompt
 
-	full_UC=settings["UC"]
+	full_UC=settings["negative_prompt"]
 	draw, img_header, used_lines_uc=fallback_font_writer(draw, img_header, full_UC, left_meta_block, line_height*(used_lines_prompt),
 		img_collages.size[0]-left_meta_block, available_lines, line_height, (255,180,180,0), explicit_space = True)
 
@@ -548,11 +539,12 @@ def fallback_font_writer(draw, img, text, x, y, wrap_x, available_y_lines, line_
 ###
 
 #Simply formats and passes the prompt on without changes, used for simple generations or complex external logic
-def generate_as_is(settings,enumerator,img_save_mode='Resume',token_test=False,token=''):
+def generate_as_is(settings,enumerator,token_test=False,token=''):
 	if token_test:
 		settings = {'name': 'Test', 'folder_name': '', 'folder_name_extra': '', 'enumerator_plus': '', 'model': 'nai-diffusion', 'seed': 0, 'sampler': 'k_euler_ancestral', 'scale': 10.0,
-			'steps': 1, 'img_mode': {'width': 64, 'height': 64}, 'prompt': 'Test', 'negative_prompt': 'Test', 'smea': False, 'dyn': False}
-		return image_gen(enumerator,form_prompt(settings),'',img_save_mode='Overwrite',token_test=True)
+			'steps': 1, 'img_mode': {'width': 64, 'height': 64}, 'prompt': 'Test', 'negative_prompt': 'Test', 'smea': False, 'dyn': False, 'dynamic_thresholding': False,
+			'dynamic_thresholding_mimic_scale': 10, 'dynamic_thresholding_percentile': 0.999}
+		return image_gen(token,form_prompt(settings),'','',token_test=True)
 	final_settings=copy.deepcopy(settings)
 	if settings["sampler"].endswith('_dyn'):
 		final_settings["smea"] = True
@@ -566,13 +558,13 @@ def generate_as_is(settings,enumerator,img_save_mode='Resume',token_test=False,t
 		final_settings["smea"] = False
 		final_settings["dyn"] = False
 	prompt=form_prompt(final_settings)
-	filepath=make_file_path(prompt,enumerator,settings["folder_name"],settings["folder_name_extra"],img_save_mode)
-	return image_gen(AUTH,prompt,filepath,img_save_mode,token_test)
+	filepath=make_file_path(prompt,enumerator,settings["folder_name"],settings["folder_name_extra"])
+	return image_gen(AUTH,prompt,filepath,enumerator)
 
 #Takes a prompt and renders it across multiple seeds at multiple scales, then puts all generations into a big collage together with the metadata
 #If a seed list is passed or the default is used, make sure it has enough seeds for the requested amount of scales (collage_width²)
 #Does some pre-processing, then adds a task to the PROCESSING_QUEUE which will be processed with prompt_stabber_process
-def prompt_stabber(settings,eval_guard=True,img_save_mode='Resume'):
+def prompt_stabber(settings,eval_guard=True):
 	global QUEUED_IMAGES
 
 	#Configures the seed list
@@ -593,7 +585,6 @@ def prompt_stabber(settings,eval_guard=True,img_save_mode='Resume'):
 	QUEUED_IMAGES+=settings["meta"]["number_of_imgs"]
 
 	settings["meta"]["processing_type"]='stab'
-	settings["meta"]["img_save_mode"]=img_save_mode
 	if eval_guard:
 		settings["meta"]["eval_guard"]=True
 	else:
@@ -659,6 +650,7 @@ def prompt_stabber_process(settings):
 		single_sampler=True
 	
 	final_collages=[]
+	print(settings)
 	for sampler in settings["sampler"][0]:
 		img_settings["sampler"]=sampler
 		sampler_collage_blocks=[]
@@ -683,9 +675,9 @@ def prompt_stabber_process(settings):
 						img_settings["prompt"] = f_string_processor(settings["prompt"],n,settings["meta"]["eval_guard"])
 						if 'Error' == img_settings["prompt"]:
 							return 'Error'
-					if type(settings["UC"])!=str:
-						img_settings["UC"] = f_string_processor(settings["UC"],n,settings["meta"]["eval_guard"])
-						if 'Error' == img_settings["UC"]:
+					if type(settings["negative_prompt"])!=str:
+						img_settings["negative_prompt"] = f_string_processor(settings["negative_prompt"],n,settings["meta"]["eval_guard"])
+						if 'Error' == img_settings["negative_prompt"]:
 							return 'Error'
 					#Report the current queue position before rendering
 					if CANCEL_REQUEST:
@@ -693,7 +685,7 @@ def prompt_stabber_process(settings):
 					print(f'Processing task: {FINISHED_TASKS+1+SKIPPED_TASKS}/{PROCESSING_QUEUE_LEN}')
 					print(f'Rendering img (current task): {rendered_imgs}/{settings["meta"]["number_of_imgs"]}')
 					print(f'Rendering img (complete queue): {PRODUCED_IMAGES+1+SKIPPED_IMAGES}/{QUEUED_IMAGES}')
-					imgs.append(generate_as_is(img_settings,f'(Seed꞉{seed})(n꞉ {n})(Scale꞉{img_settings["scale"]})(Steps꞉{img_settings["steps"]})(Sampler꞉{sampler})',settings["meta"]["img_save_mode"]))
+					imgs.append(generate_as_is(img_settings,f'(Seed꞉{seed})(n꞉ {n})(Scale꞉{img_settings["scale"]})(Steps꞉{img_settings["steps"]})(Sampler꞉{sampler})'))
 					rendered_imgs+=1
 				# This part is responsable for creating the structure defined by the collage_dimensions
 				if settings["meta"]["imgs_per_collage"]==1:
@@ -729,7 +721,7 @@ def prompt_stabber_process(settings):
 
 #Renders a loop according to the settings and saves those
 #Does some pre-processing, then adds a task to the PROCESSING_QUEUE which will be processed with render_loop_process
-def render_loop(settings,eval_guard=True,img_save_mode='Resume'):
+def render_loop(settings,eval_guard=True):
 	global QUEUED_IMAGES
 	number_of_imgs=settings["quantity"]
 	QUEUED_IMAGES+=number_of_imgs
@@ -746,7 +738,6 @@ def render_loop(settings,eval_guard=True,img_save_mode='Resume'):
 	settings["meta"]={}
 	settings["meta"]["number_of_imgs"]=number_of_imgs
 	settings["meta"]["processing_type"]='loop'
-	settings["meta"]["img_save_mode"]=img_save_mode
 	if eval_guard:
 		settings["meta"]["eval_guard"]=True
 	else:
@@ -798,16 +789,16 @@ def render_loop_process(settings):
 			img_settings["prompt"] = f_string_processor(settings["prompt"],n,settings["meta"]["eval_guard"])
 			if 'Error' == img_settings["prompt"]:
 				return 'Error'
-		if type(settings["UC"])!=str:
-			img_settings["UC"] = f_string_processor(settings["UC"],n,settings["meta"]["eval_guard"])
-			if 'Error' == img_settings["UC"]:
+		if type(settings["negative_prompt"])!=str:
+			img_settings["negative_prompt"] = f_string_processor(settings["negative_prompt"],n,settings["meta"]["eval_guard"])
+			if 'Error' == img_settings["negative_prompt"]:
 				return 'Error'
 		if CANCEL_REQUEST:
 			return
 		print(f'Processing task: {FINISHED_TASKS+1+SKIPPED_TASKS}/{PROCESSING_QUEUE_LEN}')
 		print(f'Rendering img (current task): {rendered_imgs}/{settings["meta"]["number_of_imgs"]}')
 		print(f'Rendering img (complete queue): {PRODUCED_IMAGES+1+SKIPPED_IMAGES}/{QUEUED_IMAGES}')
-		imgs.append(generate_as_is(img_settings,enumerator,settings["meta"]["img_save_mode"]))
+		imgs.append(generate_as_is(img_settings,enumerator))
 		rendered_imgs+=1
 	if settings["video"] == 'standard':
 		FUTURES.append(EXECUTOR.submit(make_vid,settings["folder_name"],fps=settings["FPS"]))
@@ -815,10 +806,6 @@ def render_loop_process(settings):
 		FUTURES.append(EXECUTOR.submit(make_interpolated_vid,settings["folder_name"],fps=settings["FPS"],factor=FF_FACTOR,output_mode=FF_OUTPUT_MODE))
 	FINISHED_TASKS+=1
 	return imgs
-
-
-
-
 
 # In order to make writing prompts in f-string style possible properly, some adjustments around brackets and backslashes are needed
 def f_string_pre_processor(text):
@@ -944,8 +931,17 @@ def wipe_queue(instance=None):
 	print('Task queue wiped')
 
 def cancel_processing(instance=None):
-	global CANCEL_REQUEST
+	global CANCEL_REQUEST, PAUSE_REQUEST
 	CANCEL_REQUEST = True
+	PAUSE_REQUEST = False
+	
+def switch_pause(instance=None):
+	global PAUSE_REQUEST
+	PAUSE_REQUEST = not PAUSE_REQUEST
+	
+def switch_overwrite_behavior(instance=None):
+	global OVERWRITE_IMAGES
+	OVERWRITE_IMAGES = not OVERWRITE_IMAGES
 
 def update_global_img_gen(key, value):
 	globals()[key] = value

@@ -31,9 +31,6 @@ elif sys.platform.startswith('linux'):
 elif platform == 'darwin':
 	OS = 'Mac'
 
-
-
-
 from kivy.metrics import Metrics
 Metrics.density = 1
 
@@ -72,6 +69,7 @@ from PIL import Image as PILImage
 from kivy.clock import Clock
 from kivy.uix.widget import Widget
 from kivy.uix.colorpicker import ColorPicker
+from kivy.config import Config
 
 MAX_TOKEN_COUNT = 225
 RESOLUTIONS = copy.deepcopy(NAI_RESOLUTIONS)
@@ -83,6 +81,7 @@ PREVIEW_QUEUE = []
 FUTURE = None
 
 ### Configuration ###
+Config.set('input', 'mouse', 'mouse,disable_multitouch')
 field_height=30
 font_hyper=20
 font_large=19
@@ -187,23 +186,26 @@ class DoubleEmojiButton(Button):
 	def __init__(self, symbol1='', symbol2='', **kwargs):
 		super().__init__(**kwargs)
 		self.bind(enabled=self.on_state_changed)
-		self.on_state_changed()
 		self.symbol1 = symbol1
 		self.symbol2 = symbol2
+		self.on_state_changed()
 
 	def on_state_changed(self, *args):
 		if self.enabled:
 			self.background_color = (0, 1, 0, 1)  # Green
-			self.text = '📥'
+			self.text = self.symbol1
 		else:
 			self.background_color = (1, 0, 0, 1)  # Red
-			self.text = '🚫'
+			self.text = self.symbol2
 			
 	def on_release(self):
 		self.enabled = not self.enabled
 class ImportButton(DoubleEmojiButton):
 	def __init__(self, **kwargs):
 		super().__init__(symbol1='📥', symbol2='🚫', **kwargs)
+class PauseButton(DoubleEmojiButton):
+	def __init__(self, **kwargs):
+		super().__init__(symbol1='⏵', symbol2='⏸️',font_name='Unifont',**kwargs)
 
 class StateShiftButton(Button):
 	enabled = BooleanProperty(False)
@@ -627,38 +629,67 @@ class ScrollInput(TextInput):
 		self.min_value = min_value
 		self.max_value = max_value
 		self.increment = increment
-		self.fi_mode = fi_mode
 		self.round_value = round_value
-		self.input_filter = self.fi_mode.__name__
+		if fi_mode == int or fi_mode == float:
+			self.fi_mode = fi_mode
+			self.input_filter = fi_mode.__name__
+			self.hybrid_mode = False
+		else:
+			self.fi_mode = float
+			self.hybrid_mode = True
 		self.allow_empty = allow_empty
 
 	def on_focus(self, instance, value):
 		if not value:
-			if self.allow_empty and (value == '' or value == False):
+			if self.allow_empty:
+				if (self.text == ''):
+					return
+			else:
+				if (self.text == ''):
+					self.text = format(self.min_value, f'.{self.round_value}f').rstrip('0').rstrip('.')
+					return
+			if self.hybrid_mode and not str(self.text).replace('.', '', 1).replace('-', '', 1).isdigit():
 				return
 			try:
 				value = self.fi_mode(self.text)
 				if value < self.min_value:
-					self.text = str(self.min_value)
+					self.text = format(self.min_value, f'.{self.round_value}f').rstrip('0').rstrip('.')
 				elif value > self.max_value:
-					self.text = str(self.max_value)
+					self.text = format(self.max_value, f'.{self.round_value}f').rstrip('0').rstrip('.')
 				else:
-					self.text = str(value)
+					self.text = format(value, f'.{self.round_value}f').rstrip('0').rstrip('.')
 			except ValueError:
-				print('ScrollInput ValueError')
-				print(value)
-				# User entered an invalid value
-				self.text = str(self.min_value)
+				# User entered an invalid value, this normally shouldn't be possible
+				self.text = format(self.min_value, f'.{self.round_value}f').rstrip('0').rstrip('.')
 				
 	def on_touch_down(self, touch):
-		if self.text == '':
+		# First we call the parent on_touch_down function so Kivy can do it's standard work like setting focus to the text field
+		super().on_touch_down(touch)
+		if self.text == '' or not touch.is_mouse_scrolling or not self.collide_point(*touch.pos) or not str(self.text).replace('.', '', 1).replace('-', '', 1).isdigit():
 			return
-		if touch.is_mouse_scrolling and self.collide_point(*touch.pos):
-			if touch.button == 'scrolldown':
-				self.text = str(round(min(self.fi_mode(self.text) + self.increment,self.max_value),self.round_value))
-			elif touch.button == 'scrollup':
-				self.text = str(round(max(self.fi_mode(self.text) - self.increment,self.min_value),self.round_value))
-		return super(ScrollInput, self).on_touch_down(touch)
+		keyboard = Window.request_keyboard(None, self)
+		if 'alt' in Window._modifiers:
+			if 'shift' in Window._modifiers:
+				current_increment = self.increment / 1000
+			elif 'ctrl' in Window._modifiers:
+				current_increment = self.increment / 100
+			else:
+				current_increment = self.increment / 10
+		elif 'shift' in Window._modifiers:
+			if 'ctrl' in Window._modifiers:
+				current_increment = self.increment * 1000
+			else:
+				current_increment = self.increment * 100
+		elif 'ctrl' in Window._modifiers:
+			current_increment = self.increment * 10
+		else:
+			current_increment = self.increment
+		if self.fi_mode == int and current_increment < 1:
+			current_increment = 1
+		if touch.button == 'scrolldown':
+			self.text = format(min(self.fi_mode(self.text) + current_increment,self.max_value), f'.{self.round_value}f').rstrip('0').rstrip('.')
+		elif touch.button == 'scrollup':
+			self.text = format(max(self.fi_mode(self.text) - current_increment,self.min_value), f'.{self.round_value}f').rstrip('0').rstrip('.')
 # Special input field needed for the ResolutionSelector
 class ComboCappedScrollInput(ScrollInput):
 	def __init__(self, paired_field=None, **kwargs):
@@ -782,7 +813,7 @@ class ConfigWindow(Popup):
 		match = re.search(r'"auth_token":"([^"]+)"', token)
 		if match:
 			token = match.group(1)
-		result = generate_as_is('',token,'',token_test=True)
+		result = generate_as_is(None,None,True,token)
 		if result == 'Success':
 			self.token_input.text = token
 			token_file_content = f"""#Only the access token goes into this file. Do not share it with anyone else as that's against NAI ToS. Using it on multiple of your own devices is fine.
@@ -904,6 +935,12 @@ class ImageGeneratorTasker(App):
 			pass
 
 	# Function to enable file dropping
+	def try_to_load(self,identifier,target,settings,key,enabled):
+		if enabled:
+			try:
+				target = settings[key]
+			except:
+				print(f'Failed to load {identifier} from .py')
 	def _on_file_drop(self, window, file_path, x, y):
 		import win32api
 		import win32con
@@ -920,9 +957,8 @@ class ImageGeneratorTasker(App):
 					file_text = f.read().decode('utf_16')
 					settings = ast.literal_eval(file_text[9:])
 					
-					if self.name_import.enabled: self.name_input.text = settings["name"]
-					if self.folder_name_import.enabled: self.folder_name_input.text = settings["folder_name"]
-					if self.enumerator_plus_import.enabled: self.enumerator_plus_input.text = settings["enumerator_plus"]
+					self.try_to_load("name",self.name_input.text,settings,"name",self.name_import.enabled)
+					self.try_to_load("folder_name",self.folder_name_input.text,settings,"folder_name",self.folder_name_import.enabled)
 					if self.model_import.enabled: self.model_button.text = settings["model"]
 					if self.steps_import.enabled: 
 						if type(settings["steps"]) == list:
@@ -938,6 +974,10 @@ class ImageGeneratorTasker(App):
 						else:
 							self.scale_input_min.text = str(settings["scale"])
 							self.scale_input_max.text = str(settings["scale"])
+					if self.decrisp_import:
+						self.try_to_load("dynamic_thresholding",self.decrisp_button.enabled,settings,"dynamic_thresholding",True)
+						self.try_to_load("dynamic_thresholding_mimic_scale",self.decrisp_scale_input.text,settings,"dynamic_thresholding_mimic_scale",True)
+						self.try_to_load("dynamic_thresholding_percentile",self.decrisp_percentile_input.text,settings,"dynamic_thresholding_percentile",True)
 					if self.resolution_import.enabled: 
 						self.resolution_selector.resolution_width.text = str(settings["img_mode"]["width"])
 						self.resolution_selector.resolution_height.text = str(settings["img_mode"]["height"])
@@ -949,18 +989,16 @@ class ImageGeneratorTasker(App):
 							self.prompt_f.enabled = False
 							self.prompt_input.text = str(settings["prompt"])
 					if self.uc_import.enabled:
-						if type(settings["UC"])!=str:
+						if settings.get('negative_prompt'):
+							uc_label='negative_prompt'
+						else:
+							uc_label='UC'
+						if type(settings[uc_label])!=str:
 							self.uc_f.enabled = True
-							if settings.get('negative_prompt'):
-								self.uc_f_input.load_prompts(settings["negative_prompt"])
-							else:
-								self.uc_f_input.load_prompts(settings["UC"])
+							self.uc_f_input.load_prompts(settings[uc_label])
 						else:
 							self.uc_f.enabled = False
-							if settings.get('negative_prompt'):
-								self.uc_input.text = settings["negative_prompt"]
-							else:
-								self.uc_input.text = settings["UC"]
+							self.uc_input.text = settings[uc_label]
 
 					if settings.get('collage_dimensions'):
 						self.mode_switcher.switch_cc('')
@@ -1017,6 +1055,9 @@ class ImageGeneratorTasker(App):
 						self.model_button.text = 'nai-diffusion'
 					elif metadata["info"]["Source"] == 'Stable Diffusion 1D44365E' or metadata["info"]["Source"] == 'Stable Diffusion F4D50568': # Initial release/silent update with ControlNet
 						self.model_button.text = 'safe-diffusion'
+					elif metadata["info"]["Source"] == 'Stable Diffusion': # This should normally not be encountered but some images in the past were generated like this due to a bug on NAI's side
+						print(f"The loaded picture doesn't have the model specified. Defaulting to NAID Full, but be aware the original model for this picture might have been different")
+						self.model_button.text = 'nai-diffusion'
 					else:
 						print(f'Error while determining model, defaulting to Full')
 						self.model_button.text = 'nai-diffusion'
@@ -1050,12 +1091,19 @@ class ImageGeneratorTasker(App):
 						else:
 							self.is_sampler_smea.enabled = False
 							self.is_sampler_dyn.enabled = False
+				if self.decrisp_import:
+					self.try_to_load("dynamic_thresholding",self.decrisp_button.enabled,comment_dict,"dynamic_thresholding",True)
+					self.try_to_load("dynamic_thresholding_mimic_scale",self.decrisp_button.enabled,comment_dict,"dynamic_thresholding_mimic_scale",True)
+					self.try_to_load("dynamic_thresholding_percentile",self.decrisp_button.enabled,comment_dict,"dynamic_thresholding_percentile",True)
 				if self.prompt_import.enabled:
 					self.prompt_f.enabled = False
 					self.prompt_input.text = str(metadata["info"]["Description"])
 				if self.uc_import.enabled:
 					self.uc_f.enabled = False
-					self.uc_input.text = comment_dict["uc"]
+					if comment_dict.get('uc'):
+						self.uc_input.text = comment_dict["uc"]
+					else:
+						self.uc_input.text = comment_dict["negative_prompt"]
 				print(f'Loading from picture successful')
 			else:
 				# Ignore file if it doesn't meet the requirements
@@ -1149,8 +1197,8 @@ class ImageGeneratorTasker(App):
 		self.scale_import = ImportButton(**imp_row_size1)
 		scale_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, field_height))
 		#The API actually accepts much, much higher scale values, though there really seems no point in going higher than 100 at all
-		self.scale_input_min = ScrollInput(min_value=1.1, max_value=100, fi_mode=float, increment=0.1, text='10', multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors, font_size=font_small)
-		self.scale_input_max = ScrollInput(min_value=1.1, max_value=100, fi_mode=float, increment=0.1, text='10', multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors, font_size=font_small)
+		self.scale_input_min = ScrollInput(min_value=1.1, max_value=1000, fi_mode=float, increment=0.1, text='10', multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors, font_size=font_small)
+		self.scale_input_max = ScrollInput(min_value=1.1, max_value=1000, fi_mode=float, increment=0.1, text='10', multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors, font_size=font_small)
 		scale_layout.add_widget(self.scale_input_min)
 		scale_layout.add_widget(self.scale_input_max)
 
@@ -1192,6 +1240,21 @@ class ImageGeneratorTasker(App):
 		is_sampler_layout.add_widget(self.is_sampler_smea)
 		is_sampler_layout.add_widget(self.is_sampler_dyn)
 
+		# Decrisper
+		decrisp_label = Label(text='Decrisper:', **l_row_size1, **label_color)
+		self.decrisp_import = ImportButton(**imp_row_size1)
+		self.decrisp_button = StateShiftButton(text='Decrisper', size_hint=(None, None), size=(90,field_height))
+		decrisp_scale = Label(text='Mimic Scale:', size_hint=(None, None), size=(100, field_height), **label_color)
+		self.decrisp_scale_input = ScrollInput(min_value=-10000, max_value=10000, fi_mode=None, increment=0.1, text='10', multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors, font_size=font_small)
+		decrisp_percentile = Label(text='Percentile:', size_hint=(None, None), size=(90, field_height), **label_color)
+		self.decrisp_percentile_input = ScrollInput(min_value=0.000001, max_value=1, fi_mode=None, increment=0.001, text='0.999', multiline=False, size_hint=(1, None), size=(100, field_height), round_value=6, **input_colors, font_size=font_small)
+		decrisp_layout = BoxLayout(orientation='horizontal',size_hint=(1, None), height=field_height)
+		decrisp_layout.add_widget(self.decrisp_button)
+		decrisp_layout.add_widget(decrisp_scale)
+		decrisp_layout.add_widget(self.decrisp_scale_input)
+		decrisp_layout.add_widget(decrisp_percentile)
+		decrisp_layout.add_widget(self.decrisp_percentile_input)
+		
 		# Resolution
 		resolution_label = Label(text='Resolution:', **l_row_size1, **label_color)
 		self.resolution_import = ImportButton(**imp_row_size1)
@@ -1284,16 +1347,6 @@ class ImageGeneratorTasker(App):
 		action_buttons_layout.add_widget(self.queue_button)
 		action_buttons_layout.add_widget(self.process_button)
 
-		# Cancel buttons
-		cancel_buttons_label = Label(text='Cancel/Wipe:', **l_row_size1, **label_color)
-		cancel_buttons_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=field_height)
-		self.wipe_queue_button = Button(text='Wipe Queue', size_hint=(1, None), height=field_height, **button_colors)
-		self.wipe_queue_button.bind(on_release=wipe_queue)
-		self.cancel_button = Button(text='Cancel Processing', size_hint=(1, None), height=field_height, **button_colors)
-		self.cancel_button.bind(on_release=cancel_processing)
-		cancel_buttons_layout.add_widget(self.wipe_queue_button)
-		cancel_buttons_layout.add_widget(self.cancel_button)
-
 		# Add all elements to layout, which is the primary block for interactions on the left, split into the label/button/input columns
 		input_layout = GridLayout(cols=3)
 		input_layout.add_widget(mode_label)
@@ -1340,6 +1393,10 @@ class ImageGeneratorTasker(App):
 		input_layout.add_widget(self.is_sampler_import)
 		input_layout.add_widget(is_sampler_layout)		
 
+		input_layout.add_widget(decrisp_label)
+		input_layout.add_widget(self.decrisp_import)
+		input_layout.add_widget(decrisp_layout)
+
 		input_layout.add_widget(resolution_label)
 		input_layout.add_widget(self.resolution_import)
 		input_layout.add_widget(self.resolution_selector)
@@ -1364,19 +1421,28 @@ class ImageGeneratorTasker(App):
 		input_layout.add_widget(Label(text='',size_hint=(None, None),size=(0,0)))
 		input_layout.add_widget(action_buttons_layout)
 
-		input_layout.add_widget(cancel_buttons_label)
-		input_layout.add_widget(Label(text='',size_hint=(None, None),size=(0,0)))
-		input_layout.add_widget(cancel_buttons_layout)
-
 		# The super_layout is highest layout in the hierarchy and this also the one that is returned.
 		# It has the user interaction section left, the console/metadata section in the middle, and the image preview on the right
 		
 		console = Console()
 		
-		task_counter_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=field_height)
+		task_state_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=field_height)
+		self.cancel_button = Button(text='⬛', font_name='Unifont',size_hint=(None, None), size=(field_height,field_height), **button_colors)
+		self.cancel_button.bind(on_release=cancel_processing)
+		self.pause_button = PauseButton(**imp_row_size1)
+		self.pause_button.bind(on_release=switch_pause)
+		overwrite_button = StateShiftButton(text='Overwrite Images', size_hint=(1, None), size=(70,field_height), font_size=font_small)
+		overwrite_button.bind(on_release=switch_overwrite_behavior)
+		self.wipe_queue_button = Button(text='Wipe Queue', size_hint=(1, None), size=(60,field_height), **button_colors)
+		self.wipe_queue_button.bind(on_release=wipe_queue)
+		task_state_layout.add_widget(self.pause_button)
+		task_state_layout.add_widget(self.cancel_button)
+		task_state_layout.add_widget(overwrite_button)
+		task_state_layout.add_widget(self.wipe_queue_button)
 		
 		meta_layout = BoxLayout(orientation='vertical', size_hint=(0.5, 1))
 		meta_layout.add_widget(console)
+		meta_layout.add_widget(task_state_layout)
 		
 		self.preview = ImagePreview()
 		
@@ -1395,6 +1461,7 @@ class ImageGeneratorTasker(App):
 
 		self.mode_switcher.hide_widgets(self.is_exclusive_widgets)
 		Clock.schedule_interval(self.update_preview, 0.2)
+		self.pause_button.disabled = True
 		self.cancel_button.disabled = True
 		return self.super_layout
 
@@ -1428,7 +1495,8 @@ class ImageGeneratorTasker(App):
 			uc = self.uc_input.text
 		
 		settings = {'name': name, 'folder_name': folder_name, 'enumerator_plus': enumerator_plus, 'model': model, 'scale': scale, 'steps': steps, 'img_mode': img_mode,
-		'prompt': prompt, 'UC': uc}
+		'prompt': prompt, 'negative_prompt': uc, 'dynamic_thresholding': self.decrisp_button.enabled, 'dynamic_thresholding_mimic_scale': float(self.decrisp_scale_input.text),
+		'dynamic_thresholding_percentile': float(self.decrisp_percentile_input.text),}
 
 		if self.mode_switcher.cc_active: # Cluster collage specific settings
 			seeds = [[self.cc_seed_grid.seed_inputs[j+i*int(self.cc_seed_grid.seed_cols_input.text)].text for j in range(int(self.cc_seed_grid.seed_cols_input.text))] for i in range(int(self.cc_seed_grid.seed_rows_input.text))]
@@ -1442,7 +1510,7 @@ class ImageGeneratorTasker(App):
 				sampler = self.cc_sampler_input.text
 			collage_dimensions = [int(self.cc_dim_width.text), int(self.cc_dim_height.text)]
 			settings.update({'seed': seed, 'sampler': sampler, 'collage_dimensions': collage_dimensions})
-			prompt_stabber(settings, img_save_mode='Resume')
+			prompt_stabber(settings)
 		else: # Image sequence specific settings
 			if not self.is_seed_input.text == '':
 				seed = self.is_seed_input.text
@@ -1459,7 +1527,7 @@ class ImageGeneratorTasker(App):
 			else:
 				video = ''
 			settings.update({'seed': int(seed), 'sampler': sampler, 'quantity': quantity, 'video': video, 'FPS': int(self.is_fps.text)})
-			render_loop(settings, img_save_mode='Resume')
+			render_loop(settings)
 		print(settings)
 	def generate_single_image(self, instance):
 		self.single_img_button.disabled = True
@@ -1498,19 +1566,17 @@ class ImageGeneratorTasker(App):
 		'img_mode': {'width': int(self.resolution_selector.resolution_width.text),
 								'height': int(self.resolution_selector.resolution_height.text)},
 		'prompt': self.prompt_input.text,
-		'UC': self.uc_input.text}
-		
+		'negative_prompt': self.uc_input.text,
+		'dynamic_thresholding': self.decrisp_button.enabled,
+		'dynamic_thresholding_mimic_scale': float(self.decrisp_scale_input.text),
+		'dynamic_thresholding_percentile': float(self.decrisp_percentile_input.text),}
 		print(settings)
 		future = EXECUTOR.submit(generate_as_is,settings,'')
 		future.add_done_callback(self.on_process_complete)
 
 	def on_process_button_press(self, instance):	
 		global PREVIEW_QUEUE, FUTURE
-		self.single_img_button.disabled = True
-		self.queue_button.disabled = True
-		self.process_button.disabled = True
-		self.wipe_queue_button.disabled = True
-		self.cancel_button.disabled = False
+		self.switch_processing_state(True)
 		try:
 			FUTURE = EXECUTOR.submit(process_queue,preview=PREVIEW_QUEUE)
 			FUTURE.add_done_callback(self.on_process_complete)
@@ -1528,11 +1594,16 @@ class ImageGeneratorTasker(App):
 		except Exception as e:
 			import traceback
 			traceback.print_exc()
-		self.single_img_button.disabled = False
-		self.queue_button.disabled = False
-		self.process_button.disabled = False
-		self.wipe_queue_button.disabled = False
-		self.cancel_button.disabled = True
+		self.switch_processing_state(False)
+	
+	def switch_processing_state(self, processing):
+		self.single_img_button.disabled = processing
+		self.queue_button.disabled = processing
+		self.process_button.disabled = processing 
+		self.wipe_queue_button.disabled = processing
+		self.cancel_button.disabled = not processing
+		self.pause_button.disabled = not processing
+		
 
 if __name__ == '__main__':
 	ImageGeneratorTasker().run()
