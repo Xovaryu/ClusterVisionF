@@ -15,9 +15,12 @@ import numpy as np
 import glob
 import cv2
 import zipfile
+import traceback
 
 from concurrent.futures import ThreadPoolExecutor
+import PIL
 from PIL import ImageFont, ImageDraw, Image, ImageOps
+PIL.Image.MAX_IMAGE_PIXELS = 900000000
 from collections import deque
 from fontTools.ttLib import TTFont
 
@@ -36,6 +39,7 @@ FUTURES = []
 CANCEL_REQUEST = False
 PAUSE_REQUEST = False
 OVERWRITE_IMAGES = False
+GENERATE_IMAGES = True
 BS = '\\' # This is here because f-strings do not yet (until Python 3.12 most likely) support backstrings in the evaluated part, necessitating this BS workaround
 
 #Font list for cluster collages
@@ -67,7 +71,6 @@ try:
 	FONT_OBJS = [ImageFont.truetype(str(x), FONT_SIZE) for x in FONT_LIST]
 	TT_FONTS = [TTFont(x) for x in FONT_LIST]
 except Exception as e:
-	import traceback
 	traceback.print_exc()
 	print(f'Loading fonts failed. FONT_LIST: {FONT_LIST}')
 	sys.exit()
@@ -114,6 +117,8 @@ def form_prompt(settings,number=1,noise=0.1,strength=0.4):
 			'dynamic_thresholding': settings["dynamic_thresholding"],
 			'dynamic_thresholding_mimic_scale': settings["dynamic_thresholding_mimic_scale"],
 			'dynamic_thresholding_percentile': settings["dynamic_thresholding_percentile"],
+			'quality toggle': False,
+			'ucPreset': 0,
 			}
 		}
 	return [json_construct,settings["name"]]
@@ -131,14 +136,14 @@ def make_file_path(prompt,enumerator,folder_name,folder_name_extra):
 
 #The primary function to generate images. Sends the request and will persist until it is fulfilled, then saves the image, and returns the path
 def image_gen(auth,prompt,filepath,enumerator,token_test=False):
-	global PRODUCED_IMAGES, SKIPPED_IMAGES, WAITS_SHORT, WAITS_LONG, PAUSE_REQUEST
+	global PRODUCED_IMAGES, SKIPPED_IMAGES, WAITS_SHORT, WAITS_LONG
 	while PAUSE_REQUEST:
 		time.sleep(0.2)
 	api_header=f'Bearer {auth}'
 	retry_time=5
 
 	skipped = False
-	while True:
+	while GENERATE_IMAGES:
 		if not OVERWRITE_IMAGES and not token_test:
 			if os.path.isfile(filepath):
 				skipped = True
@@ -152,7 +157,7 @@ def image_gen(auth,prompt,filepath,enumerator,token_test=False):
 			elif resp_content == b'{"statusCode":401,"message":"Invalid accessToken."}' or resp_content == b'{"statusCode":400,"message":"Invalid Authorization header content."}':
 				return 'Error'
 		try:
-			print(f'{enumerator}\nModel: {prompt[0]["model"]}\nPrompt:\n{prompt[0]["input"]}\nUC:\n{prompt[0]["parameters"]["negative_prompt"]}')
+			print(f'''{enumerator}\nDecrisp: {prompt[0]["parameters"]["dynamic_thresholding"]} | MS: {prompt[0]["parameters"]["dynamic_thresholding_mimic_scale"]} | {prompt[0]["parameters"]["dynamic_thresholding_percentile"]}%\nModel: {prompt[0]["model"]}\nPrompt:\n{prompt[0]["input"]}\nUC:\n{prompt[0]["parameters"]["negative_prompt"]}''')
 			start=time.time()
 			resp=requests.post(URL,json.dumps(prompt[0]),headers={'Authorization': api_header,'Content-Type': 'application/json','accept': 'application/json',})
 			resp_content=resp.content
@@ -185,7 +190,7 @@ def image_gen(auth,prompt,filepath,enumerator,token_test=False):
 			continue
 		time.sleep(WAIT_TIME) # Waiting for the specified amount to avoid getting limited
 
-	if not skipped:
+	if not skipped and GENERATE_IMAGES:
 		PRODUCED_IMAGES += 1
 	else:
 		SKIPPED_IMAGES += 1
@@ -293,7 +298,6 @@ def make_collage(imgs,name,row_length=5,name_extra="",passed_image_mode=False,fo
 			try:
 				row.append(np.array(Image.open(img)))
 			except Exception as e:
-				import traceback
 				traceback.print_exc()
 				print(f"Invalid image file encountered, unable to make collage")
 				return
@@ -330,36 +334,57 @@ def attach_metadata_header(img_collages,settings,name_extra):
 	left_meta_block=900
 	
 	#Creating the header
-	starting_amount_lines = 8
+	starting_amount_lines = 9
 	img_header = Image.new("RGB", (img_collages.width, line_height*starting_amount_lines), (0, 0, 0))
 	draw = ImageDraw.Draw(img_header)
 	
 	#Draw the basic metadata on the left side
 	draw.text((10,line_height*0),f"Xovaryu's Prompt Stabber",font=font,fill=(255,220,255,0))
 	draw.text((10,line_height*1),f'Creator: {CREATOR_NAME}',font=font,fill=(200,200,255,0))
+	# Name, using the FFW to make symbols available
 	draw, img_header, used_lines_name=fallback_font_writer(draw, img_header, f'Name: {settings["name"]}', 10, line_height*2, left_meta_block, 1, line_height, (255,255,255,0))
 	if settings["model"] == 'safe-diffusion':
-		model = 'NovelAI Diffusion Curated v1.0'
+		model = 'NovelAI Diffusion Curated v1.0.1'
 	elif settings["model"] == 'nai-diffusion':
-		model = 'NovelAI Diffusion Full v1.0'
+		model = 'NovelAI Diffusion Full v1.0.1'
 	elif settings["model"] == 'nai-diffusion-furry':
 		model = 'NovelAI Diffusion Furry v1.3'
 	draw.text((10,line_height*(2+used_lines_name)),f'NovelAI Model: {model}',font=font,fill=(255,255,255,0))
 	draw.text((10,line_height*(3+used_lines_name)),f'Resolution: {settings["img_mode"]}',font=font,fill=(255,255,255,0))
 	currently_used_lines=4+used_lines_name
+	
+	# Steps, using the FFW to linebreak at  v. lines
 	available_lines = starting_amount_lines - currently_used_lines
-	draw, img_header, used_lines_steps=fallback_font_writer(draw, img_header, 'Steps: '+'|'.join([str(steps) for steps in settings["meta"]["steps"]]), 10,
+	steps = settings["steps"]
+	steps_string = 'Steps: ' + (steps if isinstance(steps, str) and "⁅" in steps else '|'.join(str(s) for s in settings["meta"]["steps"]))
+	draw, img_header, used_lines_steps=fallback_font_writer(draw, img_header, steps_string, 10,
 		line_height*currently_used_lines, left_meta_block, available_lines, line_height, (255,255,255,0), break_symbol = '|')
 	currently_used_lines=currently_used_lines+used_lines_steps
+	
+	# Scale, using the FFW to linebreak at v. lines
 	available_lines = available_lines - used_lines_steps
-	draw, img_header, used_lines_scale=fallback_font_writer(draw, img_header, 'Scale: '+'|'.join([str(scale) for scale in settings["meta"]["scale"]]), 10,
+	scale = settings["scale"]
+	scale_string = 'Scale: ' + (scale if isinstance(scale, str) and "⁅" in scale else '|'.join(str(s) for s in settings["meta"]["scale"]))
+	draw, img_header, used_lines_scale=fallback_font_writer(draw, img_header, scale_string, 10,
 		line_height*currently_used_lines, left_meta_block, available_lines, line_height, (255,255,255,0), break_symbol = '|')
 	currently_used_lines=currently_used_lines+used_lines_scale
+	
+	# Sampler, using the FFW to linebreak at commas
 	available_lines = available_lines - used_lines_scale
 	draw, img_header, used_lines_samplers=fallback_font_writer(draw, img_header, 'Sampler: '+', '.join(settings["sampler"][0]), 10,
 		line_height*currently_used_lines, left_meta_block, available_lines, line_height, (255,255,255,0), break_symbol = ',')
-
 	currently_used_lines=currently_used_lines+used_lines_samplers
+	
+	decrisper_string = 'Decrisper: '
+	if settings["dynamic_thresholding"] == False:
+		decrisper_string += 'Off'
+	else:
+		decrisper_string += f'On | M. Scale: {settings["dynamic_thresholding_mimic_scale"]} | {settings["dynamic_thresholding_percentile"]}%'
+	available_lines = available_lines - used_lines_samplers
+	draw, img_header, used_lines_decrisper=fallback_font_writer(draw, img_header, decrisper_string, 10,
+		line_height*currently_used_lines, left_meta_block, available_lines, line_height, (255,255,255,0), break_symbol = '|')
+	currently_used_lines=currently_used_lines+used_lines_decrisper
+	
 	#Draw the prompt and UC on the right side
 	full_prompt=settings["prompt"]
 	draw, img_header, used_lines_prompt=fallback_font_writer(draw, img_header, full_prompt, left_meta_block, line_height*0, img_collages.size[0]-left_meta_block,
@@ -443,6 +468,10 @@ def fallback_font_writer(draw, img, text, x, y, wrap_x, available_y_lines, line_
 	text, indexes = find_evaluated_fstring_braces(unpack_list(text))
 
 	for char_index, char in enumerate(text):
+		if available_y_lines == 0:
+			img = ImageOps.expand(img, border=(0, 0, 0, line_height), fill=(0, 0, 0))
+			draw = ImageDraw.Draw(img)
+			available_y_lines += 1
 		if any(start <= char_index < end for start, end in indexes):
 			contextual_fill = (fill[0],fill[1],0,fill[3])
 		else:
@@ -616,33 +645,14 @@ def prompt_stabber_process(settings):
 	img_settings=copy.deepcopy(settings)
 
 	#Configures steps and scale lists
-	settings["meta"]["steps"] = []
-	settings["meta"]["scale"] = []
-
-	print(settings["steps"])
-	print(settings["scale"])
-	if type(settings["steps"]) == list and settings["meta"]["imgs_per_collage"] != 1:
-		settings["meta"]["steps"] = np.linspace(settings["steps"][0], settings["steps"][-1], settings["meta"]["imgs_per_collage"]).tolist()
-	else:
-		if isinstance(settings["steps"], int):
-			settings["meta"]["steps"]=[settings["steps"]]
-		else:
-			settings["meta"]["steps"]=[settings["steps"][0]]
-
-	if type(settings["scale"])==list and settings["meta"]["imgs_per_collage"] != 1:
-		settings["meta"]["scale"] = [round(x,6) for x in np.linspace(settings["scale"][0], settings["scale"][-1], settings["meta"]["imgs_per_collage"]).tolist()]
-	else:
-		if any(isinstance(settings["scale"], type) for type in [int, float]):
-			settings["meta"]["scale"]=[settings["scale"]]
-		else:
-			settings["meta"]["scale"]=[settings["scale"][0]]
+	steps_scale_pre_processor(settings)
 
 	#Configure the folder structure if the user specified something extra
 	if img_settings.get('folder_name_user'):
 		img_settings["folder_name_extra"]=img_settings["folder_name_user"]+f'/{replace_forbidden_symbols(img_settings["name"])}'
 	else:
 		img_settings["folder_name_extra"]=f'/{replace_forbidden_symbols(img_settings["name"])}'
-
+	
 	#This loop makes the initial collages
 	color=np.array([30,30,30])
 	if not isinstance(settings["sampler"], list):
@@ -650,7 +660,6 @@ def prompt_stabber_process(settings):
 		single_sampler=True
 	
 	final_collages=[]
-	print(settings)
 	for sampler in settings["sampler"][0]:
 		img_settings["sampler"]=sampler
 		sampler_collage_blocks=[]
@@ -658,36 +667,33 @@ def prompt_stabber_process(settings):
 			collage_rows=[]
 			for seed in seed_sub_list:
 				imgs=[]
-				for n in range(settings["meta"]["imgs_per_collage"]):
-					#Load in the correct values for steps, scale and seed
-					if len(settings["meta"]["steps"]) == 1:
-						img_settings["steps"]=settings["meta"]["steps"][0]
-					else:
-						print(settings["meta"]["steps"])
-						img_settings["steps"]=int(settings["meta"]["steps"][n])
-					if len(settings["meta"]["scale"]) == 1:
-						img_settings["scale"]=settings["meta"]["scale"][0]
-					else:
-						img_settings["scale"]=round(settings["meta"]["scale"][n],6)
-					img_settings["seed"]=seed
-					#Process f-string if necessary
-					if type(settings["prompt"])!=str:
-						img_settings["prompt"] = f_string_processor(settings["prompt"],n,settings["meta"]["eval_guard"])
-						if 'Error' == img_settings["prompt"]:
-							return 'Error'
-					if type(settings["negative_prompt"])!=str:
-						img_settings["negative_prompt"] = f_string_processor(settings["negative_prompt"],n,settings["meta"]["eval_guard"])
-						if 'Error' == img_settings["negative_prompt"]:
-							return 'Error'
-					#Report the current queue position before rendering
-					if CANCEL_REQUEST:
-						return
-					print(f'Processing task: {FINISHED_TASKS+1+SKIPPED_TASKS}/{PROCESSING_QUEUE_LEN}')
-					print(f'Rendering img (current task): {rendered_imgs}/{settings["meta"]["number_of_imgs"]}')
-					print(f'Rendering img (complete queue): {PRODUCED_IMAGES+1+SKIPPED_IMAGES}/{QUEUED_IMAGES}')
-					imgs.append(generate_as_is(img_settings,f'(Seed꞉{seed})(n꞉ {n})(Scale꞉{img_settings["scale"]})(Steps꞉{img_settings["steps"]})(Sampler꞉{sampler})'))
-					rendered_imgs+=1
-				# This part is responsable for creating the structure defined by the collage_dimensions
+				n=0
+				for r in range(settings["collage_dimensions"][0]):
+					for c in range(settings["collage_dimensions"][1]):
+						#Load in the correct values for steps, scale and seed
+						steps_scale_processor(settings,img_settings,n,c,r)
+						img_settings["seed"]=seed
+						#Process f-string if necessary
+						if type(settings["prompt"])!=str:
+							img_settings["prompt"] = f_string_processor(settings["prompt"],settings["meta"]["eval_guard"],n,c,r)
+							if 'Error' == img_settings["prompt"]:
+								return 'Error'
+						if type(settings["negative_prompt"])!=str:
+							img_settings["negative_prompt"] = f_string_processor(settings["negative_prompt"],settings["meta"]["eval_guard"],n,c,r)
+							if 'Error' == img_settings["negative_prompt"]:
+								return 'Error'
+						img_settings["dynamic_thresholding_mimic_scale"] = float(f_string_processor([['f"""'+str(settings["dynamic_thresholding_mimic_scale"])+'"""']],settings["meta"]["eval_guard"],n,c,r))
+						img_settings["dynamic_thresholding_percentile"] = float(f_string_processor([['f"""'+str(settings["dynamic_thresholding_percentile"])+'"""']],settings["meta"]["eval_guard"],n,c,r))
+						#Report the current queue position before rendering
+						if CANCEL_REQUEST:
+							return
+						print(f'Processing task: {FINISHED_TASKS+1+SKIPPED_TASKS}/{PROCESSING_QUEUE_LEN}')
+						print(f'Rendering img (current task): {rendered_imgs}/{settings["meta"]["number_of_imgs"]}')
+						print(f'Rendering img (complete queue): {PRODUCED_IMAGES+1+SKIPPED_IMAGES}/{QUEUED_IMAGES}')
+						imgs.append(generate_as_is(img_settings,f'(Seed꞉{seed})(n꞉ {n})(Scale꞉{img_settings["scale"]})(Steps꞉{img_settings["steps"]})(Sampler꞉{sampler})'))
+						rendered_imgs+=1
+						n+=1
+				# This part is responsible for creating the structure defined by the collage_dimensions
 				if settings["meta"]["imgs_per_collage"]==1:
 					collage=(imgs[0])
 				else:
@@ -758,39 +764,22 @@ def render_loop_process(settings):
 	imgs=[]
 	img_settings=copy.deepcopy(settings)
 
-	if type(settings["steps"]) == list:
-		settings["meta"]["steps"] = np.linspace(settings["steps"][0], settings["steps"][-1], len(settings["quantity"])).tolist()
-	else:
-		if isinstance(settings["steps"], int):
-			settings["meta"]["steps"]=[settings["steps"]]
-
-	if type(settings["scale"])==list:
-		settings["meta"]["scale"] = np.linspace(settings["scale"][0], settings["scale"][-1], len(settings["quantity"])).tolist()
-	else:
-		if any(isinstance(settings["scale"], type) for type in [int, float]):
-			settings["meta"]["scale"]=[settings["scale"]]
+	steps_scale_pre_processor(settings)
 
 	img_settings["folder_name_extra"]=''
 	rendered_imgs=1
 	for n in settings["quantity"]:
+		steps_scale_processor(settings,img_settings,n,None,None)
 		enumerator=f'''({img_settings["seed"]})(#{str((n+1)).rjust(4,'0')})'''
-		if len(settings["meta"]["steps"]) == 1:
-			img_settings["steps"]=settings["meta"]["steps"][0]
-		else:
-			img_settings["steps"]=int(settings["meta"]["steps"][n])
-		if len(settings["meta"]["scale"]) == 1:
-			img_settings["scale"]=settings["meta"]["scale"][0]
-		else:
-			img_settings["scale"]=round(settings["meta"]["scale"][n],6)
 		enumerator+=f'(Scale꞉{img_settings["scale"]})'
 		enumerator+=f'(Steps꞉{img_settings["steps"]})'
 		#Process f-string if necessary
 		if type(settings["prompt"])!=str:
-			img_settings["prompt"] = f_string_processor(settings["prompt"],n,settings["meta"]["eval_guard"])
+			img_settings["prompt"] = f_string_processor(settings["prompt"],settings["meta"]["eval_guard"],n,None,None)
 			if 'Error' == img_settings["prompt"]:
 				return 'Error'
 		if type(settings["negative_prompt"])!=str:
-			img_settings["negative_prompt"] = f_string_processor(settings["negative_prompt"],n,settings["meta"]["eval_guard"])
+			img_settings["negative_prompt"] = f_string_processor(settings["negative_prompt"],settings["meta"]["eval_guard"],n,None,None)
 			if 'Error' == img_settings["negative_prompt"]:
 				return 'Error'
 		if CANCEL_REQUEST:
@@ -806,6 +795,39 @@ def render_loop_process(settings):
 		FUTURES.append(EXECUTOR.submit(make_interpolated_vid,settings["folder_name"],fps=settings["FPS"],factor=FF_FACTOR,output_mode=FF_OUTPUT_MODE))
 	FINISHED_TASKS+=1
 	return imgs
+
+###
+# Rendering pre-processing functions
+###
+def steps_scale_pre_processor(settings):
+	settings["meta"]["steps"] = []
+	settings["meta"]["scale"] = []
+	if settings.get('quantity'):
+		quantity = len(settings["quantity"])
+	else:
+		quantity = settings["meta"]["imgs_per_collage"]
+	if type(settings["steps"]) == list and quantity != 1:
+		settings["meta"]["steps"] = np.linspace(settings["steps"][0], settings["steps"][-1], quantity).tolist()
+	elif not type(settings["steps"]) == str:
+		if isinstance(settings["steps"], int):
+			settings["meta"]["steps"]=[settings["steps"]]
+		else:
+			settings["meta"]["steps"]=[settings["steps"][0]]
+
+	if type(settings["scale"])==list and quantity != 1:
+		settings["meta"]["scale"] = [round(x,6) for x in np.linspace(settings["scale"][0], settings["scale"][-1], quantity).tolist()]
+	elif not type(settings["scale"]) == str:
+		if any(isinstance(settings["scale"], type) for type in [int, float]):
+			settings["meta"]["scale"]=[settings["scale"]]
+		else:
+			settings["meta"]["scale"]=[settings["scale"][0]]
+
+def steps_scale_processor(settings, img_settings, n, c, r):
+	print(f'{settings, img_settings, n, c, r}')
+	for key, func1, func2 in [("steps", int, int), ("scale", float, lambda x: round(x, 6))]:
+		value = settings[key]
+		img_settings[key] = (func2(func1(f_string_processor([['f"""' + str(value) + '"""']], settings["meta"]["eval_guard"], n, c, r))) if isinstance(value, str)
+			else (settings["meta"][key][0] if len(settings["meta"][key]) == 1 else func2(settings["meta"][key][n])))
 
 # In order to make writing prompts in f-string style possible properly, some adjustments around brackets and backslashes are needed
 def f_string_pre_processor(text):
@@ -854,25 +876,22 @@ def f_string_pre_processor(text):
 		else:
 			result += char
 	if brace_level != 0:
-		raise ValueError("Mismatched braces in input string.")
+		raise ValueError(f"Mismatched braces in input string. b_l: {brace_level} | text: {text}")
 	return result
 
-
-def f_string_processor(string_lists,n,eval_guard):
+def f_string_processor(string_lists,eval_guard,n,c,r):
 	processed_string=""
 	for string_list in string_lists:
 		if eval_guard:
 			try:
-				processed_string+=eval(f_string_pre_processor(string_list[0]),{'__builtins__':{}},{'n':n,'prompt_list':string_list})
+				processed_string+=eval(f_string_pre_processor(string_list[0]),{'__builtins__':{}},{'n':n,'c':c,'r':r,'prompt_list':string_list})
 			except Exception as e:
-				import traceback
 				traceback.print_exc()
 				return 'Error'
 		else:
 			try:
-				processed_string+=eval(f_string_pre_processor(string_list[0]),{},{'n':n,'prompt_list':string_list})
+				processed_string+=eval(f_string_pre_processor(string_list[0]),{},{'n':n,'c':c,'r':r,'prompt_list':string_list})
 			except Exception as e:
-				import traceback
 				traceback.print_exc()
 				return 'Error'
 	return processed_string
@@ -942,6 +961,10 @@ def switch_pause(instance=None):
 def switch_overwrite_behavior(instance=None):
 	global OVERWRITE_IMAGES
 	OVERWRITE_IMAGES = not OVERWRITE_IMAGES
+	
+def switch_generate_behavior(instance=None):
+	global GENERATE_IMAGES
+	GENERATE_IMAGES = not GENERATE_IMAGES
 
 def update_global_img_gen(key, value):
 	globals()[key] = value
@@ -957,7 +980,6 @@ def debriefing():
 				try:
 					print(f'Future result: {future.result()}')
 				except Exception as e:
-					import traceback
 					traceback.print_exc()
 	for n in range(5): print('GENERATION COMPLETE')
 	print(f'Images generated:{PRODUCED_IMAGES}')

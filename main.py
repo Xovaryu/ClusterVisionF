@@ -48,6 +48,7 @@ import ast
 import time
 import re
 import itertools
+import traceback
 from kivy.uix.popup import Popup
 from kivy.app import App
 from kivy.core.window import Window
@@ -92,8 +93,8 @@ bg_label_colors={'color': THEME[6]["value"], 'background_color': THEME[7]["value
 button_colors={'color': THEME[8]["value"], 'background_color': THEME[9]["value"]}
 dp_button_colors={'color': THEME[10]["value"], 'background_color': THEME[11]["value"]}
 
-l_row_size1={'size_hint':(None, None),'size':(170, field_height)}
-l_row_size2={'size_hint':(None, 1),'size':(170, field_height)}
+l_row_size1={'size_hint':(None, None),'size':(120, field_height)}
+l_row_size2={'size_hint':(None, 1),'size':(120, field_height)}
 imp_row_size1={'size_hint':(None, None),'size':(field_height, field_height)}
 imp_row_size2={'size_hint':(None, 1),'size':(field_height, field_height)}
 #Load in fonts
@@ -239,11 +240,13 @@ class StateFButton(StateShiftButton):
 		if self.enabled:
 			self.mode_switcher.hide_widgets(self.standard_widgets)
 			self.mode_switcher.unhide_widgets(self.f_widgets)
-			self.injector.target = self.f_target
+			if not self.injector == None:
+				self.injector.target = self.f_target
 		else:
 			self.mode_switcher.unhide_widgets(self.standard_widgets)
 			self.mode_switcher.hide_widgets(self.f_widgets)
-			self.injector.target = self.standard_target
+			if not self.injector == None:
+				self.injector.target = self.standard_target
 
 class InjectorDropdown(BoxLayout):
 	def __init__(self, dropdown_list=[], button_text='', target=None, inject_identifier='P', **kwargs):
@@ -327,10 +330,11 @@ class ConditionalInjectorDropdown(InjectorDropdown):
 		self.target.text += string
 	
 	def attach_smea_dyn(self, string, item_layout):
-		if item_layout.children[1].enabled: #Dyn
-			string = string[:-2] + '_dyn' + string[-2:]
-		elif item_layout.children[2].enabled: #SMEA
-			string = string[:-2] + '_smea' + string[-2:]
+		if type(item_layout.children[1]) == StateShiftButton:
+			if item_layout.children[1].enabled: #Dyn
+				string = string[:-2] + '_dyn' + string[-2:]
+			elif item_layout.children[2].enabled: #SMEA
+				string = string[:-2] + '_smea' + string[-2:]
 		return string
 
 class ScrollDropDownButton(Button):
@@ -479,15 +483,18 @@ class SeedGrid(GridLayout):
 
 		# add any missing input widgets
 		while len(self.seed_inputs) < num_inputs:
-			seed_input = ScrollInput(text='', min_value=0, max_value=4294967295, multiline=False, **input_colors, font_size=font_small, allow_empty=True)
+			seed_input = ScrollInput(text='', min_value=0, max_value=4294967295, increment=1000, multiline=False, **input_colors, font_size=font_small, allow_empty=True)
 			self.seed_inputs.append(seed_input)
 			self.cc_seed_grid.add_widget(seed_input)
 
 	def load_seeds(self, seeds):
-		self.seed_rows_input.text, self.seed_cols_input.text = str(len(seeds)), str(len(seeds[0]))
-		self.adjust_grid_size()
-		for seed_input, value in zip(self.seed_inputs, itertools.chain(*seeds)):
-			seed_input.text = str(value)
+		try:
+			self.seed_rows_input.text, self.seed_cols_input.text = str(len(seeds)), str(len(seeds[0]))
+			self.adjust_grid_size()
+			for seed_input, value in zip(self.seed_inputs, itertools.chain(*seeds)):
+				seed_input.text = str(value)
+		except:
+			traceback.print_exc()
 
 	def randomize(self):
 		for widget in self.cc_seed_grid.children:
@@ -507,21 +514,29 @@ class PromptGrid(GridLayout):
 		self.prompt_rows = 1
 		self.prompt_inputs = []
 		self.prompt_eval_list = BoxLayout(orientation='vertical', size_hint=(1, 1), size=(100, field_height*4))
-		self.btn1 = Button(text='Row+', size_hint=(None, None), size=(100, field_height), **button_colors)
+		self.btn1 = Button(text='Row+', size_hint=(1, None), size=(100, field_height), **button_colors)
 		self.btn1.bind(on_release=lambda btn: self.on_increase_rows())
-		self.btn2 = Button(text='Row-', size_hint=(None, None), size=(100, field_height), **button_colors)
+		self.btn2 = Button(text='Row-', size_hint=(1, None), size=(100, field_height), **button_colors)
 		self.btn2.bind(on_release=lambda btn: self.on_decrease_rows())
-		self.btn3 = Button(text='Copy ⁅⁆', size_hint=(None, None), size=(100, field_height), **button_colors)
+		self.btn3 = Button(text='Copy ⁅⁆', size_hint=(1, None), size=(100, field_height), **button_colors)
 		self.btn3.bind(on_release=lambda btn: Clipboard.copy('⁅⁆'))
 		self.btn3.font_name = 'Unifont'
-		self.btn4 = Button(text='Inject ⁅⁆', size_hint=(None, None), size=(100, field_height), **button_colors)
+		self.btn4 = Button(text='Inject ⁅⁆', size_hint=(1, None), size=(100, field_height), **button_colors)
 		self.btn4.bind(on_release=lambda btn: setattr(self.prompt_inputs[0], 'text', self.prompt_inputs[0].text+'⁅⁆'))
 		self.btn4.font_name = 'Unifont'
-		self.btn_grid = GridLayout(cols=1, size_hint=(None, 1))
+		self.btn5 = Button(text='Inject ⁅Seq.⁆', size_hint=(1, None), size=(100, field_height), **button_colors)
+		self.btn5.bind(on_release=lambda btn: setattr(self.prompt_inputs[0], 'text', self.prompt_inputs[0].text+'''⁅'♥‼¡'*n⁆'''))
+		self.btn5.font_name = 'Unifont'
+		self.btn6 = Button(text='Inject ⁅List⁆', size_hint=(1, None), size=(100, field_height), **button_colors)
+		self.btn6.bind(on_release=lambda btn: setattr(self.prompt_inputs[0], 'text', self.prompt_inputs[0].text+'''⁅['0','1','...'][n]⁆'''))
+		self.btn6.font_name = 'Unifont'
+		self.btn_grid = GridLayout(cols=1, size_hint=(None, 1), width=115)
 		self.btn_grid.add_widget(self.btn1)
 		self.btn_grid.add_widget(self.btn2)
 		self.btn_grid.add_widget(self.btn3)
 		self.btn_grid.add_widget(self.btn4)
+		self.btn_grid.add_widget(self.btn5)
+		self.btn_grid.add_widget(self.btn6)
 		self.add_widget(self.btn_grid)
 		self.add_widget(self.prompt_eval_list)
 		
@@ -543,9 +558,12 @@ class PromptGrid(GridLayout):
 			self.prompt_eval_list.add_widget(prompt_input)
 
 	def load_prompts(self, prompts):
-		self.adjust_grid_size(len(prompts))
-		for i in range(len(prompts)):
-			self.prompt_inputs[i].text = str(prompts[i])[6:-5].replace("\\'","'")
+		try:
+			self.adjust_grid_size(len(prompts))
+			for i in range(len(prompts)):
+				self.prompt_inputs[i].text = str(prompts[i])[6:-5].replace("\\'","'")
+		except:
+			traceback.print_exc()
 
 	def on_increase_rows(self):
 		rows = min(self.prompt_rows + 1, 5)
@@ -713,7 +731,6 @@ class ComboCappedScrollInput(ScrollInput):
 					self.text = str(value)
 					self.value = str(value)
 			except Exception as e:
-				import traceback
 				traceback.print_exc()
 				
 	def on_touch_down(self, touch):
@@ -845,6 +862,7 @@ AUTH='{token}'
 		theme_example_layout = GridLayout(cols=2)
 		
 		# Set up and add all the necessary elements for token handling
+		skip_button = StateShiftButton(text='Skip Generation',on_release=switch_generate_behavior, size_hint=(1,None), size=(100,field_height))
 		token_button = Button(text='Set token (DO NOT SHARE):', on_release=self.process_token, size_hint=(1,None), size=(100,field_height))
 		self.token_state = BGLabel(font_name='NotoEmoji', text='❔', background_color=[0.5, 0.5, 0.5, 1], size_hint=(None,None), size=(field_height,field_height))
 		token_layout = BoxLayout(orientation='horizontal')
@@ -852,6 +870,7 @@ AUTH='{token}'
 		token_layout.add_widget(token_button)
 		token_layout.add_widget(self.token_state)
 		token_layout.add_widget(self.token_input)
+		layout.add_widget(skip_button)
 		layout.add_widget(token_layout)
 		
 		self.content = layout
@@ -935,190 +954,214 @@ class ImageGeneratorTasker(App):
 			pass
 
 	# Function to enable file dropping
-	def try_to_load(self,identifier,target,settings,key,enabled):
+	def try_to_load(self, identifier, target, settings, keys, enabled, setattr_id=None):
 		if enabled:
 			try:
-				target = settings[key]
+				if type(keys) == list:
+					value = settings
+					for key in keys:
+						value = value[key]
+				else:
+					value = settings[keys]
+				if setattr_id is None:
+					target = settings[key]
+				else:
+					if setattr_id == 'text':
+						setattr(target, setattr_id, str(value))
+					else:
+						setattr(target, setattr_id, value)
 			except:
+				traceback.print_exc()
 				print(f'Failed to load {identifier} from .py')
 	def _on_file_drop(self, window, file_path, x, y):
-		import win32api
-		import win32con
-		import win32gui
-		hwnd = win32gui.GetActiveWindow()
-		win32api.SendMessage(hwnd, win32con.WM_USER + 10, 50, 0)
-		file_path=file_path.decode()
 		# Check if file is a python file or image
 		try:
-			if str(file_path).endswith('.py'):
-				print(f'Loading settings from .py file')
-				# Open file and read settings dictionary
-				with open(file_path, "rb") as f:
-					file_text = f.read().decode('utf_16')
-					settings = ast.literal_eval(file_text[9:])
-					
-					self.try_to_load("name",self.name_input.text,settings,"name",self.name_import.enabled)
-					self.try_to_load("folder_name",self.folder_name_input.text,settings,"folder_name",self.folder_name_import.enabled)
-					if self.model_import.enabled: self.model_button.text = settings["model"]
-					if self.steps_import.enabled: 
-						if type(settings["steps"]) == list:
-							self.steps_slider_min.value = str(settings["steps"][0])
-							self.steps_slider_max.value = str(settings["steps"][1])
-						else:
-							self.steps_slider_min.value = str(settings["steps"])
-							self.steps_slider_max.value = str(settings["steps"])
-					if self.scale_import.enabled:
-						if type(settings["scale"]) == list:
-							self.scale_input_min.text = str(settings["scale"][0])
-							self.scale_input_max.text = str(settings["scale"][1])
-						else:
-							self.scale_input_min.text = str(settings["scale"])
-							self.scale_input_max.text = str(settings["scale"])
-					if self.decrisp_import:
-						self.try_to_load("dynamic_thresholding",self.decrisp_button.enabled,settings,"dynamic_thresholding",True)
-						self.try_to_load("dynamic_thresholding_mimic_scale",self.decrisp_scale_input.text,settings,"dynamic_thresholding_mimic_scale",True)
-						self.try_to_load("dynamic_thresholding_percentile",self.decrisp_percentile_input.text,settings,"dynamic_thresholding_percentile",True)
-					if self.resolution_import.enabled: 
-						self.resolution_selector.resolution_width.text = str(settings["img_mode"]["width"])
-						self.resolution_selector.resolution_height.text = str(settings["img_mode"]["height"])
-					if self.prompt_import.enabled:
-						if type(settings["prompt"])!=str:
-							self.prompt_f.enabled = True
-							self.prompt_f_input.load_prompts(settings["prompt"])
-						else:
-							self.prompt_f.enabled = False
-							self.prompt_input.text = str(settings["prompt"])
-					if self.uc_import.enabled:
-						if settings.get('negative_prompt'):
-							uc_label='negative_prompt'
-						else:
-							uc_label='UC'
-						if type(settings[uc_label])!=str:
-							self.uc_f.enabled = True
-							self.uc_f_input.load_prompts(settings[uc_label])
-						else:
-							self.uc_f.enabled = False
-							self.uc_input.text = settings[uc_label]
-
-					if settings.get('collage_dimensions'):
-						self.mode_switcher.switch_cc('')
-						if self.cc_dim_import.enabled: 
-							self.cc_dim_width.text = str(settings["collage_dimensions"][0])
-							self.cc_dim_height.text = str(settings["collage_dimensions"][1])
-						if self.cc_seed_import.enabled: self.cc_seed_grid.load_seeds(settings["seed"])
-						if type(settings["sampler"]) == list and self.cc_sampler_import.enabled:
-							self.cc_sampler_input.text = ', '.join(settings["sampler"][0])
-						elif self.cc_sampler_import.enabled:
-							self.cc_sampler_input.text = settings["sampler"]
-					else:
-						self.mode_switcher.switch_is('')
-						if self.is_sampler_import.enabled: 
-							sampler = settings["sampler"]
-							if sampler.endswith('_dyn'):
-								self.is_sampler_smea.enabled = True
-								self.is_sampler_dyn.enabled = True
-								sampler = sampler[:-4]
-							elif sampler.endswith('_smea'):
-								self.is_sampler_smea.enabled = True
-								self.is_sampler_dyn.enabled = False
-								sampler = sampler[:-5]
-							else:
-								self.is_sampler_smea.enabled = False
-								self.is_sampler_dyn.enabled = False
-							self.is_sampler_button.text = sampler
-						if self.is_seed_import.enabled: self.is_seed_input.text = str(settings["seed"])
-						if self.is_range_import.enabled:
-							self.is_quantity.text = str(settings["quantity"])
-							if settings["video"] == 'standard':
-								self.is_video.enabled = True
-							else:
-								self.is_video.enabled = False
-							self.is_fps.text = str(settings["FPS"])
-				print(f'Loading from .py settings file successful')
-					
+			file_path=file_path.decode('utf_8')
+			print(file_path)
+			if file_path.endswith('.py'):
+				self.load_settings_from_py(file_path)
 			elif file_path.endswith('.jpg') or file_path.endswith('.png'):
-				print(f'Loading settings from picture detected')
-				self.mode_switcher.switch_is('')
-				with PILImage.open(file_path) as img:
-					metadata = {
-					"size": img.size,
-					"info": img.info
-					}
-				comment_dict = json.loads(metadata["info"]["Comment"])
-				if self.name_import.enabled: self.name_input.text = os.path.splitext(os.path.basename(file_path))[0]
-				# Should be refactored to folder_name_user if at all
-				#if self.folder_name_import.enabled: self.folder_name_input.text = os.path.dirname(file_path)
-				if self.model_import.enabled:
-					if metadata["info"]["Source"] == 'Stable Diffusion 1D09D794' or metadata["info"]["Source"] == 'Stable Diffusion F64BA557': # v1.2/1.3 
-						self.model_button.text = 'nai-diffusion-furry'
-					elif metadata["info"]["Source"] == 'Stable Diffusion 81274D13' or metadata["info"]["Source"] == 'Stable Diffusion 3B3287AF': # Initial release/silent update with ControlNet
-						self.model_button.text = 'nai-diffusion'
-					elif metadata["info"]["Source"] == 'Stable Diffusion 1D44365E' or metadata["info"]["Source"] == 'Stable Diffusion F4D50568': # Initial release/silent update with ControlNet
-						self.model_button.text = 'safe-diffusion'
-					elif metadata["info"]["Source"] == 'Stable Diffusion': # This should normally not be encountered but some images in the past were generated like this due to a bug on NAI's side
-						print(f"The loaded picture doesn't have the model specified. Defaulting to NAID Full, but be aware the original model for this picture might have been different")
-						self.model_button.text = 'nai-diffusion'
-					else:
-						print(f'Error while determining model, defaulting to Full')
-						self.model_button.text = 'nai-diffusion'
-				if self.steps_import.enabled: self.steps_slider_min.value = str(comment_dict["steps"])
-				if self.scale_import.enabled: self.scale_input_min.text = str(comment_dict["scale"])
-				if self.resolution_import.enabled: 
-					self.resolution_selector.resolution_width.text = str(metadata["size"][0])
-					self.resolution_selector.resolution_height.text = str(metadata["size"][1])
-				if self.is_seed_import.enabled: self.is_seed_input.text = str(comment_dict["seed"])
-				
-				if self.is_sampler_import.enabled:
-					sampler_string = str(comment_dict["sampler"])
-					if sampler_string == 'nai_smea_dyn':
-						self.is_sampler_button.text = 'k_euler_ancestral'
+				self.load_settings_from_image(file_path)
+		except Exception as e:
+			traceback.print_exc()
+	def load_settings_from_py(self, file_path):
+		print(f'Loading settings from .py file')
+		with open(file_path, "rb") as f:
+			file_text = f.read().decode('utf_16')
+			settings = ast.literal_eval(file_text[9:])
+
+		# Load the settings using the try_to_load function
+		self.try_to_load('name', self.name_input, settings, 'name', self.name_import.enabled, 'text')
+		self.try_to_load('folder_name', self.folder_name_input, settings, 'folder_name', self.folder_name_import.enabled, 'text')
+		self.try_to_load('model', self.model_button, settings, 'model', self.model_import.enabled, 'text')
+		if self.steps_import.enabled: 
+			if type(settings["steps"]) == str:
+				self.steps_f.enabled = True
+				self.try_to_load('steps', self.steps_input_f, settings, 'steps', True, 'text')
+			elif type(settings["steps"]) == list:
+				self.steps_f.enabled = False
+				self.try_to_load('steps', self.steps_slider_min, settings, ['steps', 0], True, 'value')
+				self.try_to_load('steps', self.steps_slider_max, settings, ['steps', 1], True, 'value')
+			else:
+				self.steps_f.enabled = False
+				self.try_to_load('steps', self.steps_slider_min, settings, 'steps', True, 'value')
+				self.try_to_load('steps', self.steps_slider_max, settings, 'steps', True, 'value')
+		if self.scale_import.enabled:
+			if type(settings["scale"]) == str:
+				self.scale_f.enabled = True
+				self.try_to_load('scale', self.scale_input_f, settings, 'scale', True, 'text')
+			elif type(settings["scale"]) == list:
+				self.scale_f.enabled = False
+				self.try_to_load('scale', self.scale_input_min, settings, ['scale', 0], True, 'text')
+				self.try_to_load('scale', self.scale_input_max, settings, ['scale', 1], True, 'text')
+			else:
+				self.scale_f.enabled = False
+				self.try_to_load('scale', self.scale_input_min, settings, 'scale', True, 'text')
+				self.try_to_load('scale', self.scale_input_max, settings, 'scale', True, 'text')
+		self.try_to_load('dynamic_thresholding', self.decrisp_button, settings, 'dynamic_thresholding', self.decrisp_import.enabled, 'enabled')
+		self.try_to_load('dynamic_thresholding_mimic_scale', self.decrisp_scale_input, settings, 'dynamic_thresholding_mimic_scale', self.decrisp_import.enabled, 'text')
+		self.try_to_load('dynamic_thresholding_percentile', self.decrisp_percentile_input, settings, 'dynamic_thresholding_percentile', self.decrisp_import.enabled, 'text')
+		self.try_to_load('img_mode_width', self.resolution_selector.resolution_width, settings, ['img_mode', 'width'], self.resolution_import.enabled, 'text')
+		self.try_to_load('img_mode_height', self.resolution_selector.resolution_height, settings, ['img_mode', 'height'], self.resolution_import.enabled, 'text')
+		if self.prompt_import.enabled:
+			if type(settings["prompt"])!=str:
+				self.prompt_f.enabled = True
+				self.prompt_f_input.load_prompts(settings["prompt"])
+			else:
+				self.prompt_f.enabled = False
+				self.try_to_load('prompt', self.prompt_input, settings, 'prompt', True, 'text')
+		if self.uc_import.enabled:
+			if settings.get('negative_prompt'):
+				uc_label='negative_prompt'
+			else:
+				uc_label='UC'
+			if type(settings[uc_label])!=str:
+				self.uc_f.enabled = True
+				self.uc_f_input.load_prompts(settings[uc_label])
+			else:
+				self.uc_f.enabled = False
+				self.try_to_load('negative_prompt', self.uc_input, settings, uc_label, True, 'text')
+
+		if settings.get('collage_dimensions'):
+			self.mode_switcher.switch_cc('')
+			self.try_to_load('collage_dimensions', self.cc_dim_width, settings, ['collage_dimensions', 0], self.cc_dim_import.enabled, 'text')
+			self.try_to_load('collage_dimensions', self.cc_dim_height, settings, ['collage_dimensions', 1], self.cc_dim_import.enabled, 'text')
+			if self.cc_seed_import.enabled: self.cc_seed_grid.load_seeds(settings["seed"])
+			if type(settings["sampler"]) == list and self.cc_sampler_import.enabled:
+				try:
+					self.cc_sampler_input.text = ', '.join(settings["sampler"][0])
+				except:
+					traceback.print_exc()
+			elif self.cc_sampler_import.enabled:
+				self.try_to_load('sampler', self.cc_sampler_input, settings, 'sampler', True, 'text')
+		else:
+			self.mode_switcher.switch_is('')
+			if self.is_sampler_import.enabled: 
+				try:
+					sampler = settings["sampler"]
+					if sampler.endswith('_dyn'):
 						self.is_sampler_smea.enabled = True
 						self.is_sampler_dyn.enabled = True
-					elif sampler_string == 'nai_smea':
-						self.is_sampler_button.text = 'k_euler_ancestral'
+						sampler = sampler[:-4]
+					elif sampler.endswith('_smea'):
 						self.is_sampler_smea.enabled = True
 						self.is_sampler_dyn.enabled = False
+						sampler = sampler[:-5]
 					else:
-						self.is_sampler_button.text = sampler_string
-						if comment_dict.get('sm_dyn'):
-							if comment_dict["sm_dyn"]:
-								self.is_sampler_smea.enabled = True
-								self.is_sampler_dyn.enabled = True
-						elif comment_dict.get('sm'):
-							if comment_dict["sm"]:
-								self.is_sampler_smea.enabled = True
-								self.is_sampler_dyn.enabled = False
-						else:
-							self.is_sampler_smea.enabled = False
-							self.is_sampler_dyn.enabled = False
-				if self.decrisp_import:
-					self.try_to_load("dynamic_thresholding",self.decrisp_button.enabled,comment_dict,"dynamic_thresholding",True)
-					self.try_to_load("dynamic_thresholding_mimic_scale",self.decrisp_button.enabled,comment_dict,"dynamic_thresholding_mimic_scale",True)
-					self.try_to_load("dynamic_thresholding_percentile",self.decrisp_button.enabled,comment_dict,"dynamic_thresholding_percentile",True)
-				if self.prompt_import.enabled:
-					self.prompt_f.enabled = False
-					self.prompt_input.text = str(metadata["info"]["Description"])
-				if self.uc_import.enabled:
-					self.uc_f.enabled = False
-					if comment_dict.get('uc'):
-						self.uc_input.text = comment_dict["uc"]
-					else:
-						self.uc_input.text = comment_dict["negative_prompt"]
-				print(f'Loading from picture successful')
+						self.is_sampler_smea.enabled = False
+						self.is_sampler_dyn.enabled = False
+					self.is_sampler_button.text = str(sampler)
+				except:
+					traceback.print_exc()
+			self.try_to_load('seed', self.is_seed_input, settings, 'seed', self.is_seed_import.enabled, 'text')
+			if self.is_range_import.enabled:
+				self.try_to_load('image sequence quantity', self.is_quantity, settings, 'quantity', True, 'text')
+				if settings["video"] == 'standard':
+					self.is_video.enabled = True
+				else:
+					self.is_video.enabled = False
+				self.try_to_load('FPS', self.is_fps, settings, 'FPS', True, 'text')
+		print(f'Loading from .py settings file successful')
+	def load_settings_from_image(self, file_path):
+		print(f'Loading settings from picture')
+		self.mode_switcher.switch_is('')
+		with PILImage.open(file_path) as img:
+			metadata = {
+			"size": img.size,
+			"info": img.info
+			}
+		comment_dict = json.loads(metadata["info"]["Comment"])
+		if self.name_import.enabled: self.name_input.text = os.path.splitext(os.path.basename(file_path))[0]
+		if self.model_import.enabled:
+			if metadata["info"].get('Source'):
+				if metadata["info"]["Source"] == 'Stable Diffusion 1D09D794' or metadata["info"]["Source"] == 'Stable Diffusion F64BA557': # v1.2/1.3 
+					self.model_button.text = 'nai-diffusion-furry'
+				elif metadata["info"]["Source"] == 'Stable Diffusion 81274D13' or metadata["info"]["Source"] == 'Stable Diffusion 3B3287AF': # Initial release/silent update with ControlNet
+					self.model_button.text = 'nai-diffusion'
+				elif metadata["info"]["Source"] == 'Stable Diffusion 1D44365E' or metadata["info"]["Source"] == 'Stable Diffusion F4D50568': # Initial release/silent update with ControlNet
+					self.model_button.text = 'safe-diffusion'
+				elif metadata["info"]["Source"] == 'Stable Diffusion': # This should normally not be encountered but some images in the past were generated like this due to a bug on NAI's side
+					print(f"The loaded picture doesn't have the model specified. Defaulting to NAID Full, but be aware the original model for this picture might have been different")
+					self.model_button.text = 'nai-diffusion'
+				else:
+					print(f'Error while determining model, defaulting to Full')
+					self.model_button.text = 'nai-diffusion'
+		self.steps_f.enabled = False
+		self.scale_f.enabled = False
+		self.try_to_load('steps', self.steps_slider_min, comment_dict, 'steps', self.steps_import.enabled, 'value')
+		self.try_to_load('scale', self.scale_input_min, comment_dict, 'scale', self.scale_import.enabled, 'text')
+		if self.resolution_import.enabled:
+			self.resolution_selector.resolution_width.text = str(metadata["size"][0])
+			self.resolution_selector.resolution_height.text = str(metadata["size"][1])
+		self.try_to_load('seed', self.is_seed_input, comment_dict, 'seed', self.is_seed_import.enabled, 'text')
+
+		if self.is_sampler_import.enabled:
+			try:
+				sampler_string = str(comment_dict["sampler"])
+			except:
+				traceback.print_exc()
+			if sampler_string == 'nai_smea_dyn':
+				self.is_sampler_button.text = 'k_euler_ancestral'
+				self.is_sampler_smea.enabled = True
+				self.is_sampler_dyn.enabled = True
+			elif sampler_string == 'nai_smea':
+				self.is_sampler_button.text = 'k_euler_ancestral'
+				self.is_sampler_smea.enabled = True
+				self.is_sampler_dyn.enabled = False
 			else:
-				# Ignore file if it doesn't meet the requirements
-				print(f'Unusable file detected (drop a .py, .png or .jpg file)')
-		except Exception as e:
-			import traceback
-			traceback.print_exc()
-		return
-		
+				self.is_sampler_button.text = sampler_string
+				if comment_dict.get('sm_dyn'):
+					if comment_dict["sm_dyn"]:
+						self.is_sampler_smea.enabled = True
+						self.is_sampler_dyn.enabled = True
+				elif comment_dict.get('sm'):
+					if comment_dict["sm"]:
+						self.is_sampler_smea.enabled = True
+						self.is_sampler_dyn.enabled = False
+				else:
+					self.is_sampler_smea.enabled = False
+					self.is_sampler_dyn.enabled = False
+		if self.decrisp_import.enabled:
+			self.try_to_load('dynamic_thresholding', self.decrisp_button.enabled, comment_dict, 'dynamic_thresholding', True)
+			self.try_to_load('dynamic_thresholding_mimic_scale', self.decrisp_scale_input, comment_dict, 'dynamic_thresholding_mimic_scale', True, 'text')
+			self.try_to_load('dynamic_thresholding_percentile', self.decrisp_percentile_input, comment_dict, 'dynamic_thresholding_percentile', True, 'text')
+		if self.prompt_import.enabled:
+			self.prompt_f.enabled = False
+			self.try_to_load('prompt', self.prompt_input, metadata,["info", "Description"], True, 'text')
+		if self.uc_import.enabled:
+			self.uc_f.enabled = False
+			if comment_dict.get('uc'):
+				self.uc_input.text = comment_dict["uc"]
+			else:
+				self.try_to_load('negative_prompt', self.uc_input, comment_dict,'negative_prompt', True, 'text')
+		print(f'Loading from picture successful')
+
 	# Functions needed for the steps slider
 	def on_steps_value_change_min(self, instance, value):
 		self.steps_counter_min.text = str(int(value))
 	def on_steps_value_change_max(self, instance, value):
 		self.steps_counter_max.text = str(int(value))
-		
+
 	def build(self):
 		# Binding the file dropping function
 		Window.bind(on_drop_file=self._on_file_drop)
@@ -1171,10 +1214,13 @@ class ImageGeneratorTasker(App):
 		is_seed_label = Label(text='Seed:', **l_row_size1, **label_color)
 		self.is_seed_import = ImportButton(**imp_row_size1)
 		is_seed_randomize = Button(text='Randomize', size_hint=(None, None), size=(100, field_height), **button_colors)
-		self.is_seed_input = ScrollInput(min_value=0, max_value=4294967295, text='', multiline=False, size_hint=(1, None), size=(100, field_height), allow_empty=True, **input_colors)
+		is_seed_clear = Button(text='Clear', size_hint=(None, None), size=(60, field_height), **button_colors)
+		self.is_seed_input = ScrollInput(min_value=0, max_value=4294967295, increment=1000, text='', multiline=False, size_hint=(1, None), size=(100, field_height), allow_empty=True, **input_colors)
 		is_seed_randomize.bind(on_release=lambda btn: setattr(self.is_seed_input, 'text', str(generate_seed())))
+		is_seed_clear.bind(on_release=lambda btn: setattr(self.is_seed_input, 'text', ''))
 		is_seed_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, field_height))
 		is_seed_layout.add_widget(is_seed_randomize)
+		is_seed_layout.add_widget(is_seed_clear)
 		is_seed_layout.add_widget(self.is_seed_input)
 
 		# Steps
@@ -1191,6 +1237,16 @@ class ImageGeneratorTasker(App):
 		steps_layout.add_widget(self.steps_counter_min)
 		steps_layout.add_widget(self.steps_slider_max)
 		steps_layout.add_widget(self.steps_counter_max)
+		# Create the f-string variant
+		self.steps_input_f = ScrollInput(min_value=1, max_value=50, fi_mode=None, increment=1, text='⁅(c+1)⁆', multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors, font_size=font_small,font_name='Unifont')
+		self.steps_f = StateFButton(self.mode_switcher, steps_layout, self.steps_input_f, None, size_hint=(None, None), size=(field_height, field_height))
+		self.steps_f.standard_widgets = [steps_layout]
+		self.steps_f.f_widgets = [self.steps_input_f]
+		self.mode_switcher.hide_widgets([self.steps_input_f])
+		steps_super_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, field_height))
+		steps_super_layout.add_widget(self.steps_f)
+		steps_super_layout.add_widget(steps_layout)
+		steps_super_layout.add_widget(self.steps_input_f)
 
 		# Scale
 		scale_label = Label(text='Scale:', **l_row_size1, **label_color)
@@ -1201,9 +1257,20 @@ class ImageGeneratorTasker(App):
 		self.scale_input_max = ScrollInput(min_value=1.1, max_value=1000, fi_mode=float, increment=0.1, text='10', multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors, font_size=font_small)
 		scale_layout.add_widget(self.scale_input_min)
 		scale_layout.add_widget(self.scale_input_max)
+		# Create the f-string variant
+		self.scale_input_f = ScrollInput(min_value=1.1, max_value=1000, fi_mode=None, increment=0.1, text='⁅r+1⁆', multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors, font_size=font_small,font_name='Unifont')
+		self.scale_f = StateFButton(self.mode_switcher, scale_layout, self.scale_input_f, None, size_hint=(None, None), size=(field_height, field_height))
+		self.scale_f.standard_widgets = [scale_layout]
+		self.scale_f.f_widgets = [self.scale_input_f]
+		self.mode_switcher.hide_widgets([self.scale_input_f])
+		scale_super_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, field_height))
+		scale_super_layout.add_widget(self.scale_f)
+		scale_super_layout.add_widget(scale_layout)
+		scale_super_layout.add_widget(self.scale_input_f)
+		
 
 		# Sampler - Cluster Collage
-		cc_sampler_label = Label(text='Sampler:', size_hint = (None, None), size = (170, field_height*2), **label_color)	
+		cc_sampler_label = Label(text='Sampler:', **l_row_size1, **label_color)	
 		self.cc_sampler_import = ImportButton(size_hint = (None, None), size = (field_height, field_height*2))
 		self.cc_sampler_input = TextInput(multiline=True, size_hint=(1, 1), height=field_height*2, **input_colors)
 		cc_clear_button = Button(text='Clear', size_hint=(None, 1), size=(60, field_height*2), **button_colors)
@@ -1245,9 +1312,9 @@ class ImageGeneratorTasker(App):
 		self.decrisp_import = ImportButton(**imp_row_size1)
 		self.decrisp_button = StateShiftButton(text='Decrisper', size_hint=(None, None), size=(90,field_height))
 		decrisp_scale = Label(text='Mimic Scale:', size_hint=(None, None), size=(100, field_height), **label_color)
-		self.decrisp_scale_input = ScrollInput(min_value=-10000, max_value=10000, fi_mode=None, increment=0.1, text='10', multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors, font_size=font_small)
+		self.decrisp_scale_input = ScrollInput(min_value=-10000, max_value=10000, fi_mode=None, increment=0.1, text='10', multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors, font_size=font_small,font_name='Unifont')
 		decrisp_percentile = Label(text='Percentile:', size_hint=(None, None), size=(90, field_height), **label_color)
-		self.decrisp_percentile_input = ScrollInput(min_value=0.000001, max_value=1, fi_mode=None, increment=0.001, text='0.999', multiline=False, size_hint=(1, None), size=(100, field_height), round_value=6, **input_colors, font_size=font_small)
+		self.decrisp_percentile_input = ScrollInput(min_value=0.000001, max_value=1, fi_mode=None, increment=0.001, text='0.999', multiline=False, size_hint=(1, None), size=(100, field_height), round_value=6, **input_colors, font_size=font_small,font_name='Unifont')
 		decrisp_layout = BoxLayout(orientation='horizontal',size_hint=(1, None), height=field_height)
 		decrisp_layout.add_widget(self.decrisp_button)
 		decrisp_layout.add_widget(decrisp_scale)
@@ -1287,7 +1354,7 @@ class ImageGeneratorTasker(App):
 		prompt_buttons_layout.add_widget(self.prompt_f)
 
 		# UC
-		uc_label = Label(text='Undesired Content:', **l_row_size2, **label_color)
+		uc_label = Label(text='Neg. Prompt:', **l_row_size2, **label_color)
 		uc_buttons_layout = BoxLayout(orientation='vertical', **imp_row_size2)
 		self.uc_import = ImportButton()
 		self.uc_input = TextInput(multiline=True, size_hint=(1, 1), size=(100, field_height*4), **input_colors)
@@ -1313,7 +1380,7 @@ class ImageGeneratorTasker(App):
 		uc_buttons_layout.add_widget(self.uc_f)
 
 		# Collage Dimensions
-		cc_dim_label = Label(text='Collage Dimensions:', **l_row_size1, **label_color)
+		cc_dim_label = Label(text='Collage Dim.:', **l_row_size1, **label_color)
 		self.cc_dim_import = ImportButton(**imp_row_size1)
 		cc_dim_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=field_height)
 		self.cc_dim_width = ScrollInput(text='3', size_hint=(1, None), width=60, height=field_height, **input_colors)
@@ -1322,7 +1389,7 @@ class ImageGeneratorTasker(App):
 		cc_dim_layout.add_widget(self.cc_dim_height)
 
 		# Image Sequence Quantity
-		is_range_label = Label(text='Image Sequence Range:', **l_row_size1, **label_color)
+		is_range_label = Label(text='Quantity/FPS:', **l_row_size1, **label_color)
 		self.is_range_import = ImportButton(**imp_row_size1)
 		is_range_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=field_height)
 		self.is_quantity = ScrollInput(text='28', min_value=1, max_value=100000, size_hint=(1, None), width=60, height=field_height, **input_colors)
@@ -1361,10 +1428,6 @@ class ImageGeneratorTasker(App):
 		input_layout.add_widget(self.folder_name_import)
 		input_layout.add_widget(self.folder_name_input)
 
-		#input_layout.add_widget(enumerator_plus_label)
-		#input_layout.add_widget(self.enumerator_plus_import)
-		#input_layout.add_widget(self.enumerator_plus_input)
-
 		input_layout.add_widget(self.model_label)
 		input_layout.add_widget(self.model_import)
 		input_layout.add_widget(self.model_button)
@@ -1379,11 +1442,11 @@ class ImageGeneratorTasker(App):
 
 		input_layout.add_widget(steps_label)
 		input_layout.add_widget(self.steps_import)
-		input_layout.add_widget(steps_layout)	
+		input_layout.add_widget(steps_super_layout)	
 
 		input_layout.add_widget(scale_label)
 		input_layout.add_widget(self.scale_import)
-		input_layout.add_widget(scale_layout)
+		input_layout.add_widget(scale_super_layout)
 
 		input_layout.add_widget(cc_sampler_label)
 		input_layout.add_widget(self.cc_sampler_import)
@@ -1471,12 +1534,18 @@ class ImageGeneratorTasker(App):
 		folder_name = self.folder_name_input.text
 		enumerator_plus = self.enumerator_plus_input.text
 		model = self.model_button.text
-		steps = [int(self.steps_slider_min.value),(self.steps_slider_max.value)]
-		if steps[0] == steps[1]:
-			steps=steps[0]
-		scale = [float(self.scale_input_min.text), float(self.scale_input_max.text)]
-		if scale[0] == scale[1]:
-			scale=scale[0]
+		if self.steps_f.enabled:
+			steps = self.steps_input_f.text
+		else:
+			steps = [int(self.steps_slider_min.value),(self.steps_slider_max.value)]
+			if steps[0] == steps[1]:
+				steps=steps[0]
+		if self.scale_f.enabled:
+			scale = self.scale_input_f.text
+		else:
+			scale = [float(self.scale_input_min.text), float(self.scale_input_max.text)]
+			if scale[0] == scale[1]:
+				scale=scale[0]
 		img_mode = {'width': int(self.resolution_selector.resolution_width.text),
 								'height': int(self.resolution_selector.resolution_height.text)}
 		if self.prompt_f.enabled:
@@ -1493,10 +1562,9 @@ class ImageGeneratorTasker(App):
 			uc = [['f"""' + self.uc_f_input.prompt_inputs[i].text + '"""'] for i in range(self.uc_f_input.prompt_rows)]
 		else:
 			uc = self.uc_input.text
-		
 		settings = {'name': name, 'folder_name': folder_name, 'enumerator_plus': enumerator_plus, 'model': model, 'scale': scale, 'steps': steps, 'img_mode': img_mode,
-		'prompt': prompt, 'negative_prompt': uc, 'dynamic_thresholding': self.decrisp_button.enabled, 'dynamic_thresholding_mimic_scale': float(self.decrisp_scale_input.text),
-		'dynamic_thresholding_percentile': float(self.decrisp_percentile_input.text),}
+		'prompt': prompt, 'negative_prompt': uc, 'dynamic_thresholding': self.decrisp_button.enabled, 'dynamic_thresholding_mimic_scale': self.decrisp_scale_input.text,
+		'dynamic_thresholding_percentile': self.decrisp_percentile_input.text,}
 
 		if self.mode_switcher.cc_active: # Cluster collage specific settings
 			seeds = [[self.cc_seed_grid.seed_inputs[j+i*int(self.cc_seed_grid.seed_cols_input.text)].text for j in range(int(self.cc_seed_grid.seed_cols_input.text))] for i in range(int(self.cc_seed_grid.seed_rows_input.text))]
@@ -1581,7 +1649,6 @@ class ImageGeneratorTasker(App):
 			FUTURE = EXECUTOR.submit(process_queue,preview=PREVIEW_QUEUE)
 			FUTURE.add_done_callback(self.on_process_complete)
 		except Exception as e:
-			import traceback
 			traceback.print_exc()
 			self.on_process_complete(None,immediate_preview=False)
 			PREVIEW_QUEUE=[]
@@ -1592,7 +1659,6 @@ class ImageGeneratorTasker(App):
 			if immediate_preview and future.result() != 'Error':
 				PREVIEW_QUEUE.append(future.result())
 		except Exception as e:
-			import traceback
 			traceback.print_exc()
 		self.switch_processing_state(False)
 	
