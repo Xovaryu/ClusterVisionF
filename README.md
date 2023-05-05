@@ -43,7 +43,6 @@ I also have a discord server where I organize all my AI image generation endeavo
 -GenerationZone.py is in disrepair for now and needs an update in the future  
 -The way the console in the UI is pruned causes markup error messages and may discolor the first messages  
 -Backspaces in evaluated parts of prompts do not work properly, this is an issue with Python that will be fixed in 3.12, until then a BS constant is available  
--Decrisper settings aren't properly saved into .py files and aren't displayed on cluster collages yet  
 
 ### Version 3.0.1
 #### Added Features/Changes
@@ -75,3 +74,23 @@ I also have a discord server where I organize all my AI image generation endeavo
 -Fixed a refactoring issue that would case the program to fail when parsing a new token  
 -Fixed capitalization of the font name used as an example in 1.User_Settings.py, you may or may not have to adjust/delete the file  
 -Raised the JPG quality to 90 to prevent overly destructive artifacts in collages (the quality setting will be exposed at a later date)  
+
+### Version 3.2
+#### Added Features/Changes
+-Added f-string support for scale/steps  
+-Added decrisper (dynamic thresholding) f-string support  
+-Added row/column (r/c) variables for use in cluster collages  
+-Adjusted PIL settings to support much larger images  
+-Added a button in the settings window to allow completely skipping any generations (mostly useful for debugging and ensuring that no Anlas is spent accidentally)  
+-Changed model numbers to reflect the micro-update NAI made  
+-Added buttons to inject f-string templates to the prompt/UC  
+-Added a clear button for seeds when making image sequences  
+-Made the enumerator printout more verbose  
+-Refactored and simplified the handling of steps/scale  
+-Refactored the way settings are loaded  
+-Made various parts of the code more robust  
+
+#### Bug Fixes
+-Explicitly defined that QT and UC presets are never used  
+-Fixed an issue with how newlines are added in the fallback font writer  
+-Fixed an issue with how the injector dropdown handles samplers  
