@@ -1,13 +1,15 @@
+"""
+config_handler.py
+This module is responsible for handling all configuration files
+It writes, loads (and in the future updates) configuration files
+"""
+
 import os
 import ast
 import sys
+from initialization import handle_exceptions, GlobalState
+GS = GlobalState()
 
-if getattr(sys, 'frozen', False):
-    # Running in a bundle
-    FULL_DIR = os.path.dirname(sys.executable) + '/'
-else:
-    # Running in a normal Python environment
-    FULL_DIR = os.path.dirname(os.path.realpath(__file__)) + '/'
 FALLBACK_CONFIG = {
 	'1.User_Settings':
 """#Video settings
@@ -150,9 +152,9 @@ THEME=[
 AUTH=''
 """,
 }
-
+@handle_exceptions
 def write_config_file(config_name,content=False):
-	config_file = os.path.join(FULL_DIR, f"{config_name}.py")
+	config_file = os.path.join(GS.FULL_DIR, f"{config_name}.py")
 	if content:
 		with open(config_file, "w", encoding="utf_16") as f:
 			f.write(content)
@@ -160,9 +162,10 @@ def write_config_file(config_name,content=False):
 		with open(config_file, "w", encoding="utf_16") as f:
 			f.write(FALLBACK_CONFIG[config_name])
 
+@handle_exceptions
 def load_config_file(config_name):
 	try:
-		config_file = os.path.join(FULL_DIR, f"{config_name}.py")
+		config_file = os.path.join(GS.FULL_DIR, f"{config_name}.py")
 		if not os.path.exists(config_file):
 			write_config_file(config_name)
 		with open(config_file, "r", encoding="utf_16") as f:
@@ -174,7 +177,9 @@ def load_config_file(config_name):
 				target_name = node.targets[0].id
 				value = ast.literal_eval(node.value)
 				config_dict[target_name] = value
-		globals().update(config_dict)
+		for key, value in config_dict.items():
+			setattr(GS, key, value)
+		#globals().update(config_dict)
 	except Exception as e:
 		print(f'Failed to load {config_name}.py! Fix or delete the according file.')
 		import traceback
