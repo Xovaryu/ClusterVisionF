@@ -1,10 +1,10 @@
-# NovelAIDiffusion-API
+# ClusterVisionF
 
 ## Prerequisites
-- Image sequences, standard videos made from the former, and cluster collages require a functional Python 3 installation and the following packages easily installable via PIP: requests, pillow, numpy, opencv-python, fonttools, kivy, transformers
+- Image sequences, standard videos made from the former, and cluster collages require a functional Python 3 installation and the following packages easily installable via PIP: requests, pillow, numpy, imageio, imageio[pyav], fontTools, kivy, transformers
 
 ## Usage
-You can either subscribe to my Patreon page (5$) to get a .zip with a single executable file (plus the necessary fonts folder) or run this repo manually. Both versions are functionally the same.
+You can either subscribe to my Patreon page (5$) to get a .zip with a single executable file (plus the necessary fonts folder) or run this repo manually. Both versions are functionally the same. Currently this UI also needs an active NovelAI subscription. A full local Stable Diffusion integration is planned, and other APIs may be added as well.
 If you opt to run this repo yourself, set up python and the dependencies as mentioned above. I strongly recommend Python 3.10. Other version may or may not work.
 Clone/download the files from this repository to your preferred folder.
 Once you have the folder set up with the files, run main.py, and set your token in the settings window (small gear icon in the upper left corner). To do that, fetch your authorization string from the NovelAI website (example process in Firefox would be "F12 → Storage → Local Storage → https://novelai.net → session → right-click on the field on the right and copy"), then put the entire string into the field and click "Set Token".
@@ -20,77 +20,38 @@ Cluster Collage:
 
 ## Support me?
 This tool is and will remain completely free to use, but if you could spare a bit of support that would be appreciated: https://www.patreon.com/Xovaryu (mild NSFW/18+ warning)  
-I also have a discord server where I organize all my AI image generation endeavors including using this and other tools to try and gain a deeper understanding for certain characteristics of NAID, where we can share our results and so on: https://discord.gg/xJTwDVBa5b (again, NSFW/18+ warning)
+I also have a discord server where I organize all my AI image generation endeavors including using this and other tools to try and gain a deeper understanding for certain characteristics of NAID, where we can share our results and so on: https://discord.gg/xJTwDVBa5b
 
 ## Change Log
-### Version 3
+### Version 4
 #### Added Features/Changes
--Addition of a Kivy GUI  
--f-string support in cluster collages  
--Support for multiple samplers in cluster collages  
--Improved fallback font writer for cluster collages  
--Unified handling of scales/steps for cluster collages and image sequences  
--Revamped configuration handling  
--Deprecated the old way of handling QT/UC in favor of prompt chunks  
+-Cluster sequences/videos are now possible, allowing for even more complex tasks and visualizations  
+-Status reports are now time gate to improve performance and prevent hanging when quick reports otherwise would overwhelm the console (primarily when skipping many generated images)  
+-Switched video generation to imageio for a couple of reasons, and made it so that videos are processed immediately and in parallel to image generation  
+-Retired GenerationZone.py in favor of the GUI approach  
+-Settings have been added to:  
+--Switch the evaluation behavior from guarded mode without globals to raw eval(), use at your own peril  
+--Pasting the last error that happened into the clipboard  
+-Though some smaller improvements are still planned, a major refactoring has been performed to make the program more stable and easier to develop in the future:  
+--All subfunctions are decorated to prevent halting the program when issues arise, and issues are reported better, so the program should be much harder to break and easier to debug now  
+--The program has been split into more modules  
+--All wildcard imports were removed  
+--A beginning has been made to give each file a detailed manifest of its contents and purpose  
+--A global state class has been introduced to facilitate communication between different parts more efficiently and clearly  
+--Comments have been put liberally into all files to briefly describe all functions  
+--Renamed the program to ClusterVisionF so it actually has a sensical name more in line with what it does and what it's for  
+--Improved checking of settings for critical missing information  
 
-#### Breaking Changes
--Image sequence quantity is now saved as a two int list instead of range to work with literal_eval  
--nai_smea and nai_smea_dyn are deprecated names for the accordingly adjusted k_euler_ancestral sampler with SMEA/Dyn (the API is addressed with two bools, but the script now uses _smea or _dyn as suffixes for all qualifying samplers)  
--f-string formatting has been substantially changed to make it work with the UI  
--Flowframes support is broken for the time being  
+#### Bug Fixes
+-The widget hiding function has been adjusted so it can't accidentally permanently disable any elements anymore  
+-Fixed an issue when generating subcollages that have only one image  
+-Fixed the console markup issue  
+-Text with special symbols (at least confirmed under Windows) would fail to copy, the fix is a hacky overwrite of a Kivy class method however because the bug is in Kivy, it has been reported accordingly  
 
-#### Known Issues
--GenerationZone.py is in disrepair for now and needs an update in the future  
--The way the console in the UI is pruned causes markup error messages and may discolor the first messages  
+### Known Issues
+-Cancelling a running queue doesn't end video generation gracefully, and doesn't reset the visual state of the play/pause button (should be cosmetic issues only)  
+-Although video generation has been improved, options, especially for quality, still have to be properly integrated  
+-Selecting any part of text also visually affects the token counter, this bug is seemingly purely visual  
+-Windows currently always start native resolution and ignore the resolution set in build(), which is almost certainly a Kivy issue  
+-Prompt injecting doesn't work as intended for f-string prompts  
 -Backspaces in evaluated parts of prompts do not work properly, this is an issue with Python that will be fixed in 3.12, until then a BS constant is available  
-
-### Version 3.0.1
-#### Added Features/Changes
--Switched to NAI's new API, which means that sampler PLMS is not available anymore while adding some new ones. There's also a number of other related silent needed changes  
--Improved `SeedGrid`. Changed handling of grid size to use scrolling inputs and removed the according buttons. Added a clear button to wipe all fields so they will be randomized when adding a task into the queue  
--Added max variants of Square/Portrait/Landscape resolutions, specified in "1.User_Settings", delete the file or add the values manually if you want them available  
-
-#### Breaking Changes
--IMPORTANT: "2.NAID_Constants.py" needs to be edited or deleted due to the updated sampler lists and a small issue with Wallpaper resolutions  
-
-#### Bug Fixes
--Fixed import of files with sampler defined as nai_smea or nai_smea_dyn  
--Fixed some possibly malformed settings being queued (empty CC sampler field or prompt)  
--Fixed a bug that would reset resolution values to their min value when entering the text field and leaving it  
--Fixed an issue where not accepting steps/scale lists with single images might cause settings with two different steps/scale values to fail. Lists are now accepted even if only 1 value is needed  
--Fixed the Landscape/Portrait Wallpaper resolutions  
--Fixed Furry v1.3 not being correctly detected  
-
-### Version 3.1
-#### Added Features/Changes
--Added a pause/play button to halt and resume the processing of tasks  
--Added a button to adjust whether the program overwrites files at the target location or not  
--Moved the "cancel processing functionality into a more compact stop button and also moved the "wipe queue" button over below the console to make more space in the main settings area, which is already used by the next feature  
--Added support for the decrisper/dynamic thresholding (which will support f-strings in a soon-to-come followup update)  
--Added an awareness check for images that were generated without the model hash properly saved, warning the user when one of them is imported  
--Improved scrolling inputs further by allowing the increment to be adjusted (increments are multiplied as follows: CTRL → ×10 | SHIFT → ×100 | CTRL+SHIFT → ×1000 | ALT → ÷10 | ALT+CTRL → ÷100 | ALT+SHIFT → ÷1000)  
-
-#### Bug Fixes
--Fixed a refactoring issue that would case the program to fail when parsing a new token  
--Fixed capitalization of the font name used as an example in 1.User_Settings.py, you may or may not have to adjust/delete the file  
--Raised the JPG quality to 90 to prevent overly destructive artifacts in collages (the quality setting will be exposed at a later date)  
-
-### Version 3.2
-#### Added Features/Changes
--Added f-string support for scale/steps  
--Added decrisper (dynamic thresholding) f-string support  
--Added row/column (r/c) variables for use in cluster collages  
--Adjusted PIL settings to support much larger images  
--Added a button in the settings window to allow completely skipping any generations (mostly useful for debugging and ensuring that no Anlas is spent accidentally)  
--Changed model numbers to reflect the micro-update NAI made  
--Added buttons to inject f-string templates to the prompt/UC  
--Added a clear button for seeds when making image sequences  
--Made the enumerator printout more verbose  
--Refactored and simplified the handling of steps/scale  
--Refactored the way settings are loaded  
--Made various parts of the code more robust  
-
-#### Bug Fixes
--Explicitly defined that QT and UC presets are never used  
--Fixed an issue with how newlines are added in the fallback font writer  
--Fixed an issue with how the injector dropdown handles samplers  
