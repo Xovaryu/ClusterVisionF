@@ -56,6 +56,7 @@ I also have a discord server where I organize all my AI image generation endeavo
 -Image sequences actually didn't even appropriately try to evaluate f-strings for the decrisper, fixed  
 
 ### Known Issues
+-The negative prompt strength field does currently not work for cluster collages and f-strings  
 -Although video generation has been improved, options, especially for quality, still have to be properly integrated  
 -Selecting any part of text also visually affects the token counter, this bug is seemingly purely visual  
 -Windows currently always starts CVF at native resolution and ignores the resolution set in build(), which is almost certainly a Kivy issue  
