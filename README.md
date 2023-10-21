@@ -23,35 +23,41 @@ This tool is and will remain completely free to use, but if you could spare a bi
 I also have a discord server where I organize all my AI image generation endeavors including using this and other tools to try and gain a deeper understanding for certain characteristics of NAID, where we can share our results and so on: https://discord.gg/xJTwDVBa5b
 
 ## Change Log
-### Version 4
-#### Added Features/Changes
--Cluster sequences/videos are now possible, allowing for even more complex tasks and visualizations  
--Status reports are now time gate to improve performance and prevent hanging when quick reports otherwise would overwhelm the console (primarily when skipping many generated images)  
--Switched video generation to imageio for a couple of reasons, and made it so that videos are processed immediately and in parallel to image generation  
--Retired GenerationZone.py in favor of the GUI approach  
--Settings have been added to:  
---Switch the evaluation behavior from guarded mode without globals to raw eval(), use at your own peril  
---Pasting the last error that happened into the clipboard  
--Though some smaller improvements are still planned, a major refactoring has been performed to make the program more stable and easier to develop in the future:  
---All subfunctions are decorated to prevent halting the program when issues arise, and issues are reported better, so the program should be much harder to break and easier to debug now  
---The program has been split into more modules  
---All wildcard imports were removed  
---A beginning has been made to give each file a detailed manifest of its contents and purpose  
---A global state class has been introduced to facilitate communication between different parts more efficiently and clearly  
---Comments have been put liberally into all files to briefly describe all functions  
---Renamed the program to ClusterVisionF so it actually has a sensical name more in line with what it does and what it's for  
---Improved checking of settings for critical missing information  
+### Version 5
+#### Additions/Features
+-Seed fields can now be randomized/cleared individually by pressing `r`/`c` in the desired field  
+-Seed fields can now also be filled with the last two seeds that were used to generate images, using `l` for the last seed and `p` for the previous one  
+-Introduced a new variable `s` for cluster collages, which is an index of all the provided seeds  
+-All fields that support f-strings now allow placing the special f-string braces around the cursor when pressing CTRL+SHIFT+F  
+-ScrollInput fields now can adjust any contained selected number even if there's text, and will automatically search the first number if needed  
+-NAI Diffusion Anime V2 is now selectable as a model  
+-NovelAI's Undesired Content Strength is now available in the UI  
+
+#### Changes
+-WARNING: NovelAI has released a new model and changed the naming of resolutions, so delete "2.NAID_Constants.py"  
+-WARNING: Themes have gotten a slightly overhauled format, the old "3.Theme.py" file is hence outdated, rewrite or simply delete it  
+-The default resolution is now 1024x1024 in line with the newest bigger free resolution  
+-NovelAI has made permanent API tokens available under User Settings→Account→Get Persistent API Token, they can be inserted in the UI as before  
+-The console now also supports color coded warnings  
+-More refactoring, moved the kivy widgets into their own file and created the according manifest  
+-The scale/steps fields are now using their f-string version by default  
+-Streamlined StateFButton and its use, as well as PREVIEW_QUEUE (which is probably to be nuked some other update)  
+-Stripped away a number of functions in image_generator.py in favor of in-place lambda bindings  
+-Deprecated and removed the debriefing function  
 
 #### Bug Fixes
--The widget hiding function has been adjusted so it can't accidentally permanently disable any elements anymore  
--Fixed an issue when generating subcollages that have only one image  
--Fixed the console markup issue  
--Text with special symbols (at least confirmed under Windows) would fail to copy, the fix is a hacky overwrite of a Kivy class method however because the bug is in Kivy, it has been reported accordingly  
+-Failure to copy strings with certain symbols (This was a Kivy fault, has been reported by me and has a fix pending made by someone else)  
+-There was another oversight leading to a memory leak when making cluster sequences but not videos  
+-Video processing is now cancelled gracefully  
+-The persisting image generation loop now works properly and can be cancelled properly  
+-If a setting can't be imported from a previous image it was left as it is, which can cause problems in some cases, so far 2 needed fallbacks were added  
+-Made it so that if the decrisper/dynamic thresholding is disabled, the according variables are set to None, which shouldn't be necessary, but was in a fringe case  
+-Added traceback to the image loop since it would only report that it's retrying, but not the error that caused it, which is okay for connection issues, but not when I messed up  
+-Image sequences actually didn't even appropriately try to evaluate f-strings for the decrisper, fixed  
 
 ### Known Issues
--Cancelling a running queue doesn't end video generation gracefully, and doesn't reset the visual state of the play/pause button (should be cosmetic issues only)  
 -Although video generation has been improved, options, especially for quality, still have to be properly integrated  
 -Selecting any part of text also visually affects the token counter, this bug is seemingly purely visual  
--Windows currently always start native resolution and ignore the resolution set in build(), which is almost certainly a Kivy issue  
--Prompt injecting doesn't work as intended for f-string prompts  
+-Windows currently always starts CVF at native resolution and ignores the resolution set in build(), which is almost certainly a Kivy issue  
 -Backspaces in evaluated parts of prompts do not work properly, this is an issue with Python that will be fixed in 3.12, until then a BS constant is available  
+-The spacing in the config Window is all mucked up  
