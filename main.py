@@ -1,13 +1,63 @@
 """
 main.py
-This is the main entry point of the program and contains mostly the code related to building the Kivy UI
+This is the main entry point of the program and contains mostly the code related to building the Kivy UI, which means an App class
+As such the list here gives details on the functions in that App class
 When the program is started via this file, first it runs initialization.py needed for the GlobalState and the exception handling
 After that finished successfully the ClusterVisionF Kivy app is run (with a check for __main__) which starts the GUI
+
+01.	update_preview
+			Runs periodically to refresh the image preview (should be exchanged)
+02.	try_to_load
+			This function is used when trying to load settings from images or settings files, once per setting so it can report unfound settings
+03.	on_file_drop
+			Just checks the file ending and calls the according function
+04.	load_settings_from_py/load_settings_from_image
+			These functions are responsible for attempting to load all the possible settings according to file type
+05.	on_steps_value_change_min/on_steps_value_change_max
+			Functions that adjusts values for the steps sliders
+06.	build
+			The main build function called by Kivy to build the UI
+07.	check_settings
+			Small function that checks a built settings dict and makes sure that no critical settings are left empty
+08.	generate_single_image
+			Generates a settings dict and fills in variables with 0 and attempts to generate a single image
+09.	on_queue_button_press
+			Generates a settings dict for a full task and queues it
+10.	on_process_button_press
+			Locks the according parts of the UI and starts to process all tasks in order
+11.	on_process_complete
+			Wraps up a processing run
+12.	switch_processing_state
+			Used to switch the processing state and in turn which parts of the UI are locked
 """
-from initialization import handle_exceptions, GlobalState, CH
+import os
+import sys
+if sys.platform == 'win32' or sys.platform == 'cygwin':
+	# Overwrite the ctypes clipboard for windows since it bugs out when trying to copy special symbols like 💠
+	os.environ['KIVY_CLIPBOARD'] = 'sdl2'
+	OS = 'Win'
+	# This block is specifically needed to address Windows DPI issues
+	import ctypes
+	# Query DPI Awareness (Windows 10 and 8)
+	awareness = ctypes.c_int()
+	errorCode = ctypes.windll.shcore.GetProcessDpiAwareness(0, ctypes.byref(awareness))
+	# Set DPI Awareness  (Windows 10 and 8)
+	errorCode = ctypes.windll.shcore.SetProcessDpiAwareness(2)
+	# Set DPI Awareness  (Windows 7 and Vista)
+	success = ctypes.windll.user32.SetProcessDPIAware()
+elif sys.platform.startswith('linux'):
+	OS = 'Linux'
+elif sys.platform == 'darwin':
+	OS = 'Mac'
+
+
+
+
+from initialization import handle_exceptions, GlobalState
 GS = GlobalState()
 import image_generator as IM_G
 import text_manipulation as TM
+import kivy_widgets as KW
 
 from transformers import AutoTokenizer
 class CLIPCostCalculator:
@@ -20,7 +70,6 @@ class CLIPCostCalculator:
 clip_calculator = CLIPCostCalculator()
 
 import math
-import sys
 import kivy
 import json
 import ast
@@ -30,8 +79,8 @@ import itertools
 import traceback
 import copy
 import io
-import os
 from PIL import Image as PILImage
+import kivy
 from kivy.app import App
 from kivy.core.clipboard import Clipboard
 from kivy.core.image import Image as CoreImage
@@ -56,61 +105,25 @@ from kivy.uix.scrollview import ScrollView
 from kivy.uix.popup import Popup
 from kivy.clock import Clock
 from kivy.config import Config
+Config.set('input', 'mouse', 'mouse, disable_multitouch')
 from kivy.metrics import Metrics
 Metrics.density = 1
 
-if sys.platform == 'win32' or sys.platform == 'cygwin':
-	OS = 'Win'
-	# This block is specifically needed to address Windows DPI issues
-	import ctypes
-	# Query DPI Awareness (Windows 10 and 8)
-	awareness = ctypes.c_int()
-	errorCode = ctypes.windll.shcore.GetProcessDpiAwareness(0, ctypes.byref(awareness))
-	# Set DPI Awareness  (Windows 10 and 8)
-	errorCode = ctypes.windll.shcore.SetProcessDpiAwareness(2)
-	# Set DPI Awareness  (Windows 7 and Vista)
-	success = ctypes.windll.user32.SetProcessDPIAware()
-	### This is a hacky fix for the currently broken clipboard copying in Kivy
-	import win32clipboard
-	class TextInput(TextInput):
-		def copy(self, data=''):
-			self._ensure_clipboard()
-			if data:
-				win32clipboard.OpenClipboard()
-				win32clipboard.EmptyClipboard()
-				win32clipboard.SetClipboardData(win32clipboard.CF_UNICODETEXT, data)
-				win32clipboard.CloseClipboard()
-			if self.selection_text:
-				win32clipboard.OpenClipboard()
-				win32clipboard.EmptyClipboard()
-				win32clipboard.SetClipboardData(win32clipboard.CF_UNICODETEXT, self.selection_text)
-				win32clipboard.CloseClipboard()
-	###
-elif sys.platform.startswith('linux'):
-	OS = 'Linux'
-elif sys.platform == 'darwin':
-	OS = 'Mac'
-
-
-MAX_TOKEN_COUNT = 225 #To be set in context later
-RESOLUTIONS = copy.deepcopy(GS.NAI_RESOLUTIONS)
-RESOLUTIONS.update(GS.USER_RESOLUTIONS)
+MAX_TOKEN_COUNT = 225 ###To be set in context later
 PROMPT_CHUNKS = GS.NAI_PROMPT_CHUNKS + GS.USER_PROMPT_CHUNKS
 UC_CHUNKS = GS.NAI_UCS + GS.USER_UCS
 MODELS=GS.NAI_MODELS
-PREVIEW_QUEUE = []
 
 ### Configuration ###
-Config.set('input', 'mouse', 'mouse, disable_multitouch')
 field_height=30
 font_hyper=20
 font_large=19
 font_small=15
-input_colors={'foreground_color': GS.THEME[0]["value"], 'background_color': GS.THEME[1]["value"]}
-label_color={'color': GS.THEME[2]["value"]}
-bg_label_colors={'color': GS.THEME[6]["value"], 'background_color': GS.THEME[7]["value"]}
-button_colors={'color': GS.THEME[8]["value"], 'background_color': GS.THEME[9]["value"]}
-dp_button_colors={'color': GS.THEME[10]["value"], 'background_color': GS.THEME[11]["value"]}
+input_colors={'foreground_color': GS.THEME["InText"]["value"], 'background_color': GS.THEME["InBg"]["value"]}
+label_color={'color': GS.THEME["ProgText"]["value"]}
+bg_label_colors={'color': GS.THEME["CatText"]["value"], 'background_color': GS.THEME["CatBg"]["value"]}
+button_colors={'color': GS.THEME["MBtnText"]["value"], 'background_color': GS.THEME["MBtnBg"]["value"]}
+dp_button_colors={'color': GS.THEME["DBtnText"]["value"], 'background_color': GS.THEME["DBtnBg"]["value"]}
 
 l_row_size1={'size_hint':(None, None),'size':(120, field_height)}
 l_row_size2={'size_hint':(None, 1),'size':(120, field_height)}
@@ -123,1010 +136,13 @@ LabelBase.register(name='Unifont', fn_regular=GS.FULL_DIR + 'Fonts/unifont_jp-15
 #LabelBase.register(name='NotoSansJP', fn_regular=GS.FULL_DIR + 'Fonts/NotoSansJP-VF.ttf')
 LabelBase.register(name='NotoEmoji', fn_regular=GS.FULL_DIR + 'Fonts/NotoEmoji-VariableFont_wght.ttf')
 
-# Converts a color in the format kivy uses into a tag that the Console class can use
-@handle_exceptions
-def rgba_to_string(color):
-	return '[color={}{}'.format(''.join(hex(int(c * 255))[2:].zfill(2) for c in color), ']')
-
-# Functions used to link the SMEA and Dyn buttons in such a way that enabling Dyn makes sure SMEA is enabled, and that disabled SMEA disabled Dyn
-@handle_exceptions
-def on_smea_disabled(value, linked_button):
-	if not value:
-		linked_button.enabled = False
-@handle_exceptions
-def on_dyn_enabled(value, linked_button):
-	if value:
-		linked_button.enabled = True
-
-# This is a widget to at least approximate the token cost of a prompt
-class TokenCostBar(BoxLayout):
-	@handle_exceptions
-	def __init__(self, clip_calculator, max_token_count, **kwargs):
-		super(TokenCostBar, self).__init__(**kwargs)
-		self.clip_calculator = clip_calculator
-		self.max_token_count = max_token_count
-		self.color_threshold = self.max_token_count / 2
-		self.token_cost = 0
-		self.bind(pos=self.update_rect, size=self.update_rect)
-
-	@handle_exceptions
-	def update_rect(self, *args):
-		self.canvas.before.clear()
-		with self.canvas.before:
-			Rectangle(pos=self.pos, size=self.size)
-			
-			# Draw a colored bar based on the token cost
-			if self.token_cost <= self.color_threshold:
-				color_value = self.token_cost / self.color_threshold
-				Color(0, 1, 0, 1)
-			else:
-				color_value = (self.token_cost - self.color_threshold) / self.color_threshold
-				Color(color_value, 1.0 - color_value, 0.0)
-			bar_height = min(1, self.token_cost / self.max_token_count) * self.height
-			Rectangle(pos=self.pos, size=(self.width, bar_height))
-	
-	@handle_exceptions
-	def calculate_token_cost(self, instance, text):
-		self.token_cost = self.clip_calculator.calculate_token_cost(text)
-		self.update_rect()
-
-# A class for the big image preview
-class ImagePreview(AsyncImage):
-	@handle_exceptions
-	def __init__(self, **kwargs):
-		super(ImagePreview, self).__init__(**kwargs)
-		self.texture = Texture.create(size=(1,1), colorfmt='rgba')
-		self.allow_stretch = True
-
-	@handle_exceptions
-	def load_image(self, image_data):
-		try:
-			image = PILImage.open(io.BytesIO(image_data))
-			if image.mode != 'RGBA':
-				image = image.convert('RGBA')
-			self.texture = Texture.create(size=(image.size[0], image.size[1]), colorfmt='rgba')
-			flipped_image = image.transpose(PILImage.FLIP_TOP_BOTTOM)
-			self.texture.blit_buffer(flipped_image.tobytes(), colorfmt='rgba', bufferfmt='ubyte')
-			Clock.schedule_once(lambda dt: setattr(self, 'opacity', 1))
-		except:
-			traceback.print_exc()
-
-# These next classes are responsible for various buttons that change states in the UI
-class DoubleEmojiButton(Button):
-	enabled = BooleanProperty(True)
-
-	@handle_exceptions
-	def __init__(self, symbol1='', symbol2='', **kwargs):
-		super().__init__(**kwargs)
-		self.font_size = 23 ###Consider checking for values like these and making them variables
-		self.font_name = 'NotoEmoji'
-		self.bind(enabled=self.on_state_changed)
-		self.symbol1 = symbol1
-		self.symbol2 = symbol2
-		self.on_state_changed()
-
-	@handle_exceptions
-	def on_state_changed(self, *args):
-		if self.enabled:
-			self.background_color = (0, 1, 0, 1)  # Green
-			self.text = self.symbol1
-		else:
-			self.background_color = (1, 0, 0, 1)  # Red
-			self.text = self.symbol2
-
-	@handle_exceptions
-	def on_release(self):
-		self.enabled = not self.enabled
-class ImportButton(DoubleEmojiButton):
-	@handle_exceptions
-	def __init__(self, **kwargs):
-		super().__init__(symbol1='📥', symbol2='🚫', **kwargs)
-class PauseButton(DoubleEmojiButton):
-	@handle_exceptions
-	def __init__(self, **kwargs):
-		super().__init__(symbol1='▶️', symbol2='⏸️',font_name='Unifont',**kwargs)
-
-class StateShiftButton(Button):
-	enabled = BooleanProperty(False)
-	@handle_exceptions
-	def __init__(self, **kwargs):
-		super().__init__(**kwargs)
-		self.font_size=font_large
-		self.bind(enabled=self.on_state_changed)
-		self.on_state_changed()
-
-	@handle_exceptions
-	def on_state_changed(self, *args):
-		if self.enabled:
-			self.background_color = (0, 1, 0, 1)  # Green
-		else:
-			self.background_color = (1, 0, 0, 1)  # Red
-
-	@handle_exceptions
-	def on_release(self):
-		self.enabled = not self.enabled
-class StateFButton(StateShiftButton):
-	@handle_exceptions
-	def __init__(self, mode_switcher, standard_target, f_target, injector, standard_widgets = [], f_widgets =[], **kwargs):
-		self.text = 'f'
-		self.mode_switcher = mode_switcher
-		self.standard_target = standard_target
-		self.f_target = f_target
-		self.injector = injector
-		self.standard_widgets = standard_widgets
-		self.f_widgets = f_widgets
-		super().__init__(**kwargs)
-	@handle_exceptions
-	def on_state_changed(self, *args):
-		super(StateFButton, self).on_state_changed(*args)
-		if self.enabled:
-			self.mode_switcher.hide_widgets(self.standard_widgets)
-			self.mode_switcher.unhide_widgets(self.f_widgets)
-			if not self.injector == None:
-				self.injector.target = self.f_target
-		else:
-			self.mode_switcher.unhide_widgets(self.standard_widgets)
-			self.mode_switcher.hide_widgets(self.f_widgets)
-			if not self.injector == None:
-				self.injector.target = self.standard_target
-
-# These classes are for injector dropdown, dropdowns that are attached to a field and can inject their values into it
-class InjectorDropdown(BoxLayout):
-	@handle_exceptions
-	def __init__(self, dropdown_list=[], button_text='', target=None, inject_identifier='P', **kwargs):
-		super().__init__(**kwargs)
-		self.orientation='vertical'
-		self.target=target
-		self.inject_identifier=inject_identifier
-		self.dropdown = DropDown(auto_width=False,size_hint=(1, None))
-		dropdown_button = Button(text=button_text, size_hint=(None, 1), width=field_height, height=field_height*2, **button_colors)
-		#dropdown_button.bind(on_release=dropdown.open) # This should work but is unreliable
-		dropdown_button.bind(on_release=lambda *args: self.dropdown.open(dropdown_button))
-		# Update the dropdown button text when an item is selected
-		self.dropdown.bind(on_select=lambda instance, x: setattr(dropdown_button, 'text', x))
-		self.add_widget(dropdown_button)
-
-		# Create a button for each item in the list
-		for item in dropdown_list:
-			self.add_button(item)
-
-	@handle_exceptions
-	def add_button(self, item):
-		item_string = item['string']  # Store the string in a local variable
-		# Create a label for the name and string
-		item_label = BGLabel(text=f'[u]{item["name"]}[/u]\n{item_string}',markup=True,size_hint=(1, 1), **bg_label_colors)
-		item_label.bind(
-			width=lambda *args, item_label=item_label: item_label.setter('text_size')(item_label, (item_label.width, None)),
-			texture_size=lambda *args, item_label=item_label: item_label.setter('height')(item_label, item_label.texture_size[1])
-		)
-		# Create a box layout for the item
-		item_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=field_height*2)
-		# Create a button to copy the string to the clipboard
-		copy_button = Button(text='Copy', font_size=font_large, size_hint=(None, None), width=50, height=field_height*2, **button_colors)
-		copy_button.bind(on_release=lambda *args, item_string=item_string, item_layout=item_layout: self.copy_to_clipboard(item_string, item_layout))
-		# Create a button to prepend the string to the text box
-		prepend_button = Button(text='>' + self.inject_identifier, font_size=font_large, size_hint=(None, None), width=50, height=field_height*2, **button_colors)
-		prepend_button.bind(on_release=lambda *args, item_string=item_string, item_layout=item_layout: self.prepend_to_text_box(item_string, item_layout))
-		# Create a button to append the string to the text box
-		append_button = Button(text=self.inject_identifier + '<', font_size=font_large, size_hint=(None, None), width=50, height=field_height*2, **button_colors)
-		append_button.bind(on_release=lambda *args, item_string=item_string, item_layout=item_layout: self.append_to_text_box(item_string, item_layout))
-		item_layout.add_widget(copy_button)
-		item_layout.add_widget(prepend_button)
-		item_layout.add_widget(append_button)
-		item_layout.add_widget(item_label)
-		# Add the item layout to the dropdown
-		self.dropdown.add_widget(item_layout)
-		return item_layout, item_string
-
-	@handle_exceptions
-	def copy_to_clipboard(self, string, item_layout):
-		Clipboard.copy(string)
-
-	@handle_exceptions
-	def prepend_to_text_box(self, string, item_layout):
-		self.target.text = string + self.target.text
-
-	@handle_exceptions
-	def append_to_text_box(self, string, item_layout):
-		self.target.text += string
-class ConditionalInjectorDropdown(InjectorDropdown):
-	@handle_exceptions
-	def __init__(self, dropdown_list=[], button_text='', target=None, **kwargs):
-		super().__init__(dropdown_list=dropdown_list, button_text=button_text, target=target, **kwargs)
-
-	@handle_exceptions
-	def add_button(self, item, *args):
-		item_layout, item_string = super(ConditionalInjectorDropdown, self).add_button(item, *args)
-		if not (item_string == 'ddim, ' or item_string == 'plms, '):
-			sampler_smea = StateShiftButton(text='SMEA', size_hint=(None, 1), size=(70,field_height))
-			sampler_dyn = StateShiftButton(text='Dyn', size_hint=(None, 1), size=(70,field_height))
-
-			sampler_smea.bind(enabled=lambda instance, value: on_smea_disabled(value, sampler_dyn))
-			sampler_dyn.bind(enabled=lambda instance, value: on_dyn_enabled(value, sampler_smea))
-			item_layout.add_widget(sampler_smea, index=1)
-			item_layout.add_widget(sampler_dyn, index=1)
-
-	@handle_exceptions
-	def copy_to_clipboard(self, string, item_layout):
-		string = self.attach_smea_dyn(string, item_layout)
-		Clipboard.copy(string)
-
-	@handle_exceptions
-	def prepend_to_text_box(self, string, item_layout):
-		string = self.attach_smea_dyn(string, item_layout)
-		self.target.text = string + self.target.text
-
-	@handle_exceptions
-	def append_to_text_box(self, string, item_layout):
-		string = self.attach_smea_dyn(string, item_layout)
-		self.target.text += string
-	
-	@handle_exceptions
-	def attach_smea_dyn(self, string, item_layout):
-		if type(item_layout.children[1]) == StateShiftButton:
-			if item_layout.children[1].enabled: #Dyn
-				string = string[:-2] + '_dyn' + string[-2:]
-			elif item_layout.children[2].enabled: #SMEA
-				string = string[:-2] + '_smea' + string[-2:]
-		return string
-
-# A slightly more advanced dropdown button that allows scrolling values without opening the dropdown
-class ScrollDropDownButton(Button):
-	@handle_exceptions
-	def __init__(self, associated_dropdown, **kwargs):
-		self.associated_dropdown = associated_dropdown
-		super().__init__(**kwargs)
-
-	@handle_exceptions
-	def on_touch_down(self, touch):
-		if touch.is_mouse_scrolling and self.collide_point(*touch.pos):
-			if touch.button == 'scrolldown':
-				# Set text to next entry in dropdown list
-				children = self.associated_dropdown.children[0].children
-				current_index = 0
-				for i, child in enumerate(children):
-					if child.text == self.text:
-						current_index = i
-						break
-				next_index = (current_index + 1) % len(children)
-				self.text = children[next_index].text
-			elif touch.button == 'scrollup':
-				# Set text to previous entry in dropdown list
-				children = self.associated_dropdown.children[0].children
-				current_index = 0
-				for i, child in enumerate(children):
-					if child.text == self.text:
-						current_index = i
-						break
-				prev_index = (current_index - 1) % len(children)
-				self.text = children[prev_index].text
-		return super(ScrollDropDownButton, self).on_touch_down(touch)
-
-# Class for the Cluster Collage/Image Sequence/Cluster Sequence buttons at the top, also handles showing/hiding the according elements and has bools for its state
-class ModeSwitcher(BoxLayout):
-	@handle_exceptions
-	def __init__(self, app='', **kwargs):
-		super(ModeSwitcher, self).__init__(**kwargs)
-		self.app=app
-		self.cc_active = True
-		self.is_active = False
-		self.cs_active = False
-		self.cc_button = Button(text='Cluster Collage', on_press=self.switch_cc)
-		self.is_button = Button(text='Image Sequence', on_press=self.switch_is)
-		self.cs_button = Button(text='Cluster Sequence', on_press=self.switch_cs)
-		self.add_widget(self.cc_button)
-		self.add_widget(self.is_button)
-		self.add_widget(self.cs_button)
-		self.cc_button.background_color = (0, 1, 0, 1)
-		self.is_button.background_color = (1, 0, 0, 1)
-		self.cs_button.background_color = (1, 0, 0, 1)
-	
-	# These functions are responsible for switching between the cluster collage and image sequence layouts
-	@handle_exceptions
-	def switch_cc(self, f):
-		if self.cc_active == True:
-			return
-		self.cc_active = True
-		self.is_active = False
-		self.cs_active = False
-		self.cc_button.background_color = (0, 1, 0, 1)
-		self.is_button.background_color = (1, 0, 0, 1)
-		self.cs_button.background_color = (1, 0, 0, 1)
-		self.unhide_widgets(self.app.cc_exclusive_widgets)
-		self.hide_widgets(self.app.is_exclusive_widgets)
-
-	@handle_exceptions
-	def switch_is(self, f):
-		if self.is_active == True:
-			return
-		self.cc_active = False
-		self.is_active = True
-		self.cs_active = False
-		self.cc_button.background_color = (1, 0, 0, 1)
-		self.is_button.background_color = (0, 1, 0, 1)
-		self.cs_button.background_color = (1, 0, 0, 1)
-		self.unhide_widgets(self.app.is_exclusive_widgets)
-		self.hide_widgets(self.app.cc_exclusive_widgets)
-
-	@handle_exceptions
-	def switch_cs(self, f):
-		if self.cs_active == True:
-			return
-		self.cc_active = False
-		self.is_active = False
-		self.cs_active = True
-		self.cc_button.background_color = (1, 0, 0, 1)
-		self.is_button.background_color = (1, 0, 0, 1)
-		self.cs_button.background_color = (0, 1, 0, 1)
-		self.unhide_widgets(self.app.is_exclusive_widgets+self.app.cc_exclusive_widgets)
-		self.hide_widgets(self.app.non_cs_widgets)
-	
-	# These functions hide and unhide widgets
-	@handle_exceptions
-	def hide_widgets(self, widgets):
-		for widget in widgets:
-			if widget.opacity != 0 and widget.height != 0 and widget.width != 0:
-				widget.ori_opacity = widget.opacity
-				widget.ori_height = widget.height
-				widget.ori_width = widget.width
-				widget.ori_size_hint_y = widget.size_hint_y
-				widget.ori_size_hint_x = widget.size_hint_x
-				widget.opacity = 0
-				widget.height = 0
-				widget.width = 0
-				widget.size_hint_y = None
-				widget.size_hint_x = None
-
-	@handle_exceptions
-	def unhide_widgets(self, widgets):
-		try:
-			for widget in widgets:
-				widget.opacity = widget.ori_opacity
-				widget.height = widget.ori_height
-				widget.width = widget.ori_width
-				widget.size_hint_y = widget.ori_size_hint_y
-				widget.size_hint_x = widget.ori_size_hint_x
-		except:
-			pass
-
-# SeedGrid class for seed grids when making cluster collages
-class SeedGrid(GridLayout):
-	@handle_exceptions
-	def __init__(self, **kwargs):
-		super(SeedGrid, self).__init__(**kwargs)
-		self.cols=2
-		self.seed_inputs = []
-		self.cc_seed_grid = GridLayout(cols=3, size_hint=(1, 1), size=(100, field_height*4))
-		
-		self.seed_cols_input = ScrollInput(text='3', size_hint=(1, None), width=60, height=field_height, **input_colors)
-		self.seed_rows_input = ScrollInput(text='3', size_hint=(1, None), width=60, height=field_height, **input_colors)
-		self.seed_mult_label = Label(text='×', size_hint=(None, None), width=20, height=field_height)
-		self.dim_input_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=field_height)
-		self.dim_input_layout.add_widget(self.seed_cols_input)
-		self.dim_input_layout.add_widget(self.seed_mult_label)
-		self.dim_input_layout.add_widget(self.seed_rows_input)
-		self.seed_cols_input.bind(text=self.adjust_grid_size)
-		self.seed_rows_input.bind(text=self.adjust_grid_size)
-
-		self.btn1 = Button(text='Randomize', size_hint=(None, None), size=(100, field_height), **button_colors)
-		self.btn1.bind(on_release=lambda btn: self.randomize())
-		self.btn2 = Button(text='Clear', size_hint=(None, None), size=(100, field_height), **button_colors)
-		self.btn2.bind(on_release=lambda btn: self.clear())
-		self.btn3 = Button(text='Load List', size_hint=(None, None), size=(100, field_height), **button_colors)
-
-		# create label for the multiplication sign between width and height
-		self.seed_list_dropdown = DropDown()
-		self.btn3.bind(on_release=self.seed_list_dropdown.open)
-		for seed_list in GS.SEED_LISTS:
-			btn = Button(text=seed_list["name"], size_hint_y=None, height=field_height, **dp_button_colors)
-			btn.bind(on_release=lambda btn, seed_list=seed_list: (self.load_seeds(seed_list["seeds"]), self.seed_list_dropdown.dismiss()))
-			self.seed_list_dropdown.add_widget(btn)
-		
-		self.btn_grid = GridLayout(cols=1, size_hint=(None, 1))
-		self.btn_grid.add_widget(self.dim_input_layout)
-		self.btn_grid.add_widget(self.btn1)
-		self.btn_grid.add_widget(self.btn2)
-		self.btn_grid.add_widget(self.btn3)
-
-		self.add_widget(self.btn_grid)
-		self.add_widget(self.cc_seed_grid)
-		
-		self.adjust_grid_size()
-
-	@handle_exceptions
-	def adjust_grid_size(self, instance=None, text=None):
-		if self.seed_rows_input.text == '' or self.seed_cols_input.text == '':
-			return
-		# calculate the number of rows and columns needed to fit all the inputs
-		num_inputs = int(self.seed_rows_input.text) * int(self.seed_cols_input.text)
-
-		# adjust the size of the grid
-		self.cc_seed_grid.cols = int(self.seed_cols_input.text)
-
-		# remove any excess input widgets
-		while len(self.seed_inputs) > num_inputs:
-			self.cc_seed_grid.remove_widget(self.seed_inputs.pop())
-
-		# add any missing input widgets
-		while len(self.seed_inputs) < num_inputs:
-			seed_input = ScrollInput(text='', min_value=0, max_value=4294967295, increment=1000, multiline=False, **input_colors, font_size=font_small, allow_empty=True)
-			self.seed_inputs.append(seed_input)
-			self.cc_seed_grid.add_widget(seed_input)
-
-	@handle_exceptions
-	def load_seeds(self, seeds):
-		try:
-			self.seed_rows_input.text, self.seed_cols_input.text = str(len(seeds)), str(len(seeds[0]))
-			self.adjust_grid_size()
-			for seed_input, value in zip(self.seed_inputs, itertools.chain(*seeds)):
-				seed_input.text = str(value)
-		except:
-			traceback.print_exc()
-
-	@handle_exceptions
-	def randomize(self):
-		for widget in self.cc_seed_grid.children:
-			if isinstance(widget, TextInput):
-				widget.text = str(IM_G.generate_seed())
-
-	@handle_exceptions
-	def clear(self):
-		for widget in self.cc_seed_grid.children:
-			if isinstance(widget, TextInput):
-				widget.text = ''
-
-# PromptGrid class for the use of f-strings in prompting
-class PromptGrid(GridLayout):
-	@handle_exceptions
-	def __init__(self, **kwargs):
-		super(PromptGrid, self).__init__(**kwargs)
-		self.rows = 1
-		self.prompt_rows = 1
-		self.prompt_inputs = []
-		self.prompt_eval_list = BoxLayout(orientation='vertical', size_hint=(1, 1), size=(100, field_height*4))
-		self.btn1 = Button(text='Row+', size_hint=(1, None), size=(100, field_height), **button_colors)
-		self.btn1.bind(on_release=lambda btn: self.on_increase_rows())
-		self.btn2 = Button(text='Row-', size_hint=(1, None), size=(100, field_height), **button_colors)
-		self.btn2.bind(on_release=lambda btn: self.on_decrease_rows())
-		self.btn3 = Button(text='Copy ⁅⁆', size_hint=(1, None), size=(100, field_height), **button_colors)
-		self.btn3.bind(on_release=lambda btn: Clipboard.copy('⁅⁆'))
-		self.btn3.font_name = 'Unifont'
-		self.btn4 = Button(text='Inject ⁅⁆', size_hint=(1, None), size=(100, field_height), **button_colors)
-		self.btn4.bind(on_release=lambda btn: setattr(self.prompt_inputs[0], 'text', self.prompt_inputs[0].text+'⁅⁆'))
-		self.btn4.font_name = 'Unifont'
-		self.btn5 = Button(text='Inject ⁅Seq.⁆', size_hint=(1, None), size=(100, field_height), **button_colors)
-		self.btn5.bind(on_release=lambda btn: setattr(self.prompt_inputs[0], 'text', self.prompt_inputs[0].text+'''⁅'♥‼¡'*n⁆'''))
-		self.btn5.font_name = 'Unifont'
-		self.btn6 = Button(text='Inject ⁅List⁆', size_hint=(1, None), size=(100, field_height), **button_colors)
-		self.btn6.bind(on_release=lambda btn: setattr(self.prompt_inputs[0], 'text', self.prompt_inputs[0].text+'''⁅['0','1','...'][n]⁆'''))
-		self.btn6.font_name = 'Unifont'
-		self.btn_grid = GridLayout(cols=1, size_hint=(None, 1), width=115)
-		self.btn_grid.add_widget(self.btn1)
-		self.btn_grid.add_widget(self.btn2)
-		self.btn_grid.add_widget(self.btn3)
-		self.btn_grid.add_widget(self.btn4)
-		self.btn_grid.add_widget(self.btn5)
-		self.btn_grid.add_widget(self.btn6)
-		self.add_widget(self.btn_grid)
-		self.add_widget(self.prompt_eval_list)
-		
-		self.adjust_grid_size(1)
-
-	@handle_exceptions
-	def adjust_grid_size(self, rows):
-		self.prompt_rows = rows
-		# retain the text of the existing inputs
-		prompt_input_texts = [input.text for input in self.prompt_inputs]
-		self.prompt_inputs.clear()
-		self.prompt_eval_list.clear_widgets()
-		for i in range(rows):
-			prompt_input = TextInput(multiline=True, text='⁅⁆', **input_colors)
-			prompt_input.font_size = 23
-			prompt_input.font_name = 'Unifont'
-			if i < len(prompt_input_texts):
-				prompt_input.text = prompt_input_texts[i]
-			self.prompt_inputs.append(prompt_input)
-			self.prompt_eval_list.add_widget(prompt_input)
-
-	@handle_exceptions
-	def load_prompts(self, prompts):
-		try:
-			self.adjust_grid_size(len(prompts))
-			for i in range(len(prompts)):
-				self.prompt_inputs[i].text = str(prompts[i])[6:-5].replace("\\'","'")
-		except:
-			traceback.print_exc()
-
-	@handle_exceptions
-	def on_increase_rows(self):
-		rows = min(self.prompt_rows + 1, 5)
-		self.adjust_grid_size(rows)
-
-	@handle_exceptions
-	def on_decrease_rows(self):
-		rows = max(self.prompt_rows - 1, 1)
-		self.adjust_grid_size(rows)
-
-# In order to use the previous generation metadata, this class replicates a functional read-only console
-class Console(BoxLayout):
-	#A proper passing function is needed to prevent program breaking recursion
-	class TerminalPass():
-		@handle_exceptions
-		def __init__(self, type='', parent=None, **kwargs):
-			self.type = type
-			self.parent = parent
-		@handle_exceptions
-		def write(self, message):
-			self.parent.process_message(message, self.type)
-		@handle_exceptions
-		def flush(self):
-			pass
-
-	@handle_exceptions
-	def __init__(self, max_lines=200, **kwargs):
-		super().__init__(**kwargs)
-		self.orientation = 'vertical'
-		self.max_lines = max_lines
-
-		self.output_text = Label(text='', font_size=12, size_hint=(1,None), valign='top', markup=True)
-		self.output_text.bind(
-			width=lambda *x: self.output_text.setter('text_size')(self.output_text, (self.output_text.width, None)),
-			texture_size=lambda *x: self.output_text.setter('height')(self.output_text, self.output_text.texture_size[1]))
-		self.output_scroll = ScrollView(size_hint=(1, 1), effect_cls=ScrollEffect)
-		self.output_scroll.add_widget(self.output_text)
-		self.add_widget(self.output_scroll)
-		self._stdout = sys.stdout
-		self._stderr = sys.stderr
-		sys.stdout = self.pass_out = self.TerminalPass(type='out', parent=self)
-		sys.stderr = self.pass_err = self.TerminalPass(type='err', parent=self)
-
-	# No @handle_exceptions here. As the function that is responsible for intercepting and splitting terminal messsages it's handled differently
-	def process_message(self, message, type):
-		def update_label_text(dt):
-			try:
-				if type == 'out':
-					self._stdout.write(message)
-					self.output_text.text += f'{rgba_to_string(GS.THEME[4]["value"])}{message}[/color]'
-				elif type == 'err':
-					self._stderr.write(message)
-					self.output_text.text += f'{rgba_to_string(GS.THEME[5]["value"])}{message}[/color]'
-
-				# Split the text into lines
-				lines = self.output_text.text.splitlines()
-				# Check if the line length was exceeded
-				if len(lines) > self.max_lines:
-					# Join the lines back together into a single string
-					trimmed_text = '\n'.join(lines[-self.max_lines:])
-					# Find the index of the next closing color tag
-					next_closing_tag_idx = trimmed_text.find('[/color]')
-					# Trim accordingly and update the text
-					self.output_text.text = trimmed_text[next_closing_tag_idx + len('[/color]'):]
-			except:
-				# As this function would loop when using the normal print statement but still needs debugging support, this manual try/except block as wrapped in
-				self._stderr.write(traceback.format_exc())
-
-		Clock.schedule_once(update_label_text)
-	@handle_exceptions
-	def flush(self):
-		pass
-
-# A special label with a convenient integrated background, used for stuff like categories in dropdown lists
-class BGLabel(Label):
-	@handle_exceptions
-	def __init__(self, background_color=[0, 0, 0.3, 1],**kwargs):
-		super(BGLabel, self).__init__(**kwargs)
-		with self.canvas.before:
-			Color(*background_color)  # set the background color here
-			self.rect = Rectangle(size=self.size, pos=self.pos)
-		self.bind(size=self._update_rect, pos=self._update_rect)
-
-	@handle_exceptions
-	def _update_rect(self, instance, value):
-		self.rect.pos = instance.pos
-		self.rect.size = instance.size
-
-	@handle_exceptions
-	def _update_color(self, instance, color):
-		self.canvas.before.clear()
-		with self.canvas.before:
-			Color(*color)  # set the background color here
-			self.rect = Rectangle(size=self.size, pos=self.pos)
-
-# Input field used for any field with scrolling numbers
-class ScrollInput(TextInput):
-	@handle_exceptions
-	def __init__(self, min_value=1, max_value=100, increment=1, fi_mode=int, round_value=6, allow_empty=False, **kwargs):
-		super().__init__(**kwargs)
-		self.multiline = False
-		self.min_value = min_value
-		self.max_value = max_value
-		self.increment = increment
-		self.round_value = round_value
-		if fi_mode == int or fi_mode == float:
-			self.fi_mode = fi_mode
-			self.input_filter = fi_mode.__name__
-			self.hybrid_mode = False
-		else:
-			self.fi_mode = float
-			self.hybrid_mode = True
-		self.allow_empty = allow_empty
-
-	@handle_exceptions
-	def on_focus(self, instance, value):
-		if not value:
-			if self.allow_empty:
-				if (self.text == ''):
-					return
-			else:
-				if (self.text == ''):
-					self.text = format(self.min_value, f'.{self.round_value}f').rstrip('0').rstrip('.')
-					return
-			if self.hybrid_mode and not str(self.text).replace('.', '', 1).replace('-', '', 1).isdigit():
-				return
-			try:
-				value = self.fi_mode(self.text)
-				if value < self.min_value:
-					self.text = format(self.min_value, f'.{self.round_value}f').rstrip('0').rstrip('.')
-				elif value > self.max_value:
-					self.text = format(self.max_value, f'.{self.round_value}f').rstrip('0').rstrip('.')
-				else:
-					self.text = format(value, f'.{self.round_value}f').rstrip('0').rstrip('.')
-			except ValueError:
-				# User entered an invalid value, this normally shouldn't be possible
-				self.text = format(self.min_value, f'.{self.round_value}f').rstrip('0').rstrip('.')
-
-	@handle_exceptions
-	def on_touch_down(self, touch):
-		# First we call the parent on_touch_down function so Kivy can do it's standard work like setting focus to the text field
-		super().on_touch_down(touch)
-		if self.text == '' or not touch.is_mouse_scrolling or not self.collide_point(*touch.pos) or not str(self.text).replace('.', '', 1).replace('-', '', 1).isdigit():
-			return
-		keyboard = Window.request_keyboard(None, self)
-		if 'alt' in Window._modifiers:
-			if 'shift' in Window._modifiers:
-				current_increment = self.increment / 1000
-			elif 'ctrl' in Window._modifiers:
-				current_increment = self.increment / 100
-			else:
-				current_increment = self.increment / 10
-		elif 'shift' in Window._modifiers:
-			if 'ctrl' in Window._modifiers:
-				current_increment = self.increment * 1000
-			else:
-				current_increment = self.increment * 100
-		elif 'ctrl' in Window._modifiers:
-			current_increment = self.increment * 10
-		else:
-			current_increment = self.increment
-		if self.fi_mode == int and current_increment < 1:
-			current_increment = 1
-		if touch.button == 'scrolldown':
-			self.text = format(min(self.fi_mode(self.text) + current_increment,self.max_value), f'.{self.round_value}f').rstrip('0').rstrip('.')
-		elif touch.button == 'scrollup':
-			self.text = format(max(self.fi_mode(self.text) - current_increment,self.min_value), f'.{self.round_value}f').rstrip('0').rstrip('.')
-# Special input field needed for the ResolutionSelector
-class ComboCappedScrollInput(ScrollInput):
-	@handle_exceptions
-	def __init__(self, paired_field=None, **kwargs):
-		super().__init__(**kwargs)
-		self.paired_field = paired_field
-
-	@handle_exceptions
-	def on_focus(self, instance, value):
-		if not value:
-			# User has left the field
-			try:
-				value = self.fi_mode(self.text)
-				if value*int(self.paired_field.text)>3145728:
-					value = int(3145728 / int(self.paired_field.text))
-				if value % 64 != 0:
-					value = value - (value % 64)
-				if value < self.min_value or value == '':
-					self.text = str(self.min_value)
-				elif value > self.max_value:
-					self.text = str(self.max_value)
-				else:
-					self.text = str(value)
-					self.value = str(value)
-			except Exception as e:
-				traceback.print_exc()
-
-	@handle_exceptions
-	def on_touch_down(self, touch):
-		if touch.is_mouse_scrolling and self.collide_point(*touch.pos):
-			if touch.button == 'scrolldown':
-				if (int(self.text)+64)*int(self.paired_field.text)>3145728:
-					pass
-				else:
-					self.text = str(round(min(self.fi_mode(self.text) + self.increment,self.max_value),self.round_value))
-			elif touch.button == 'scrollup':
-				self.text = str(round(max(self.fi_mode(self.text) - self.increment,self.min_value),self.round_value))
-		return super(ScrollInput, self).on_touch_down(touch)
-
-# A resolution selector that aims to have just about all the possible conveniences
-class ResolutionSelector(BoxLayout):
-	@handle_exceptions
-	def __init__(self, **kwargs):
-		super().__init__(orientation='horizontal', size_hint=(1, None), height=field_height, **kwargs)
-		
-		# Create width and height input fields for custom resolution
-		self.resolution_width = ComboCappedScrollInput(text='640', increment=64, min_value=64, max_value=49152,
-													 size_hint=(1, None), width=60, height=field_height, **input_colors)
-		self.resolution_height = ComboCappedScrollInput(text='640', increment=64, min_value=64, max_value=49152, paired_field=self.resolution_width, 
-													  size_hint=(1, None), width=60, height=field_height, **input_colors)
-		self.resolution_width.paired_field = self.resolution_height
-
-		# create label for the multiplication sign between width and height
-		resolution_mult_label = Label(text='×', size_hint=(None, None), width=20, height=field_height)
-
-		# create dropdown button for selecting image mode
-		self.resolution_menu_button = Button(text='SquareNormal', size_hint=(None, None), width=150, height=field_height, **button_colors)
-
-		# create dropdown menu for image modes
-		img_dropdown = DropDown()
-		
-		# create button for each category
-		for category, modes in RESOLUTIONS.items():
-			category_label = BGLabel(text=category, size_hint_y=None, height=field_height, **bg_label_colors)
-			img_dropdown.add_widget(category_label)
-			# create button for each mode in category
-			for mode in modes:
-				img_button = Button(text=mode, size_hint_y=None, height=field_height, **dp_button_colors)
-				img_button.bind(on_release=lambda img_button: self.set_size(img_button.text, self.resolution_width,
-																			  self.resolution_height, img_dropdown))
-				img_dropdown.add_widget(img_button)
-
-		# Bind update_resolution_dropdown to changes in width and height input fields
-		self.resolution_width.bind(text=self.update_resolution_dropdown)
-		self.resolution_height.bind(text=self.update_resolution_dropdown)
-
-		# Bind opening of dropdown menu to dropdown button
-		self.resolution_menu_button.bind(on_release=lambda *args: img_dropdown.open(self.resolution_menu_button))
-		img_dropdown.bind(on_select=lambda instance, x: setattr(self.resolution_menu_button, 'text', x))
-
-		# Add widgets to layout
-		self.add_widget(self.resolution_width)
-		self.add_widget(resolution_mult_label)
-		self.add_widget(self.resolution_height)
-		self.add_widget(self.resolution_menu_button)
-
-	@handle_exceptions
-	def update_resolution_dropdown(self, *args):
-		# If the values are empty
-		if (self.resolution_width.text == '' or self.resolution_height.text == '') and (self.resolution_width.focus or self.resolution_height.focus):
-				return
-		# Get the current values of the width and height input fields
-		width = int(self.resolution_width.text)
-		height = int(self.resolution_height.text)
-
-		# Check if the current values match any known resolutions
-		for category, modes in RESOLUTIONS.items():
-			for mode, size in modes.items():
-				if width == size['width'] and height == size['height']:
-					# If a matching resolution is found, set the dropdown button text to the mode name
-					setattr(self.resolution_menu_button, 'text', mode)
-					return
-		# If no matching resolution is found, set the dropdown button text to "Custom"
-		setattr(self.resolution_menu_button, 'text', 'Custom')
-
-	# Function for the img mode dropdown, called upon clicking a valid resolution button
-	@handle_exceptions
-	def set_size(self, mode, width_input, height_input, img_dropdown):
-		mode_data = None
-		for category in RESOLUTIONS.values():
-			if mode in category:
-				mode_data = category[mode]
-				break
-		if mode_data is None:
-			return
-
-		width_input.text = str(mode_data['width'])
-		height_input.text = str(mode_data['height'])
-		img_dropdown.dismiss()
-		setattr(self.resolution_menu_button, 'text', str(mode))
-
-# Popup for configuring settings
-class ConfigWindow(Popup):
-	@handle_exceptions
-	def process_token(self, instance):
-		token = self.token_input.text
-		match = re.search(r'"auth_token":"([^"]+)"', token)
-		if match:
-			token = match.group(1)
-		result = IM_G.generate_as_is(None,None,True,token)
-		if result == 'Success':
-			self.token_input.text = token
-			token_file_content = f"""#Only the access token goes into this file. Do not share it with anyone else as that's against NAI ToS. Using it on multiple of your own devices is fine.
-AUTH='{token}'
-"""
-			CH.write_config_file('4.Token(DO NOT SHARE)',token_file_content)
-			self.update_token_state(None, result)
-		else:
-			self.update_token_state(None, result)
-			return
-
-	@handle_exceptions
-	def update_token_state(self,instance,state):
-		if state=='Success':
-			self.token_state._update_color(None, [0,1,0,1])
-			self.token_state.text = '✔️'
-		else:
-			self.token_state._update_color(None, [1,0,0,1])
-			self.token_state.text = '❌'
-
-	@handle_exceptions
-	def switch_eval_behavior(self,instance,label):
-		if not instance.enabled:
-			label.text = 'f-strings are evaluated in guarded mode'
-		else:
-			label.text = '''WARNING: f-strings are evaluated without restrictions, be thrice certain you don't blindly import malicious settings'''
-
-	@handle_exceptions
-	def check_for_error(self,instance):
-		if GS.LAST_ERROR != None:
-			self.copy_error_button.disabled = False
-
-	@handle_exceptions
-	def __init__(self, **kwargs):
-		super().__init__(**kwargs)
-		self.bind(on_open=self.check_for_error)
-		# Set up and add all the elements for the theme configurator
-		layout = BoxLayout(orientation='vertical')
-		
-		#layout.add_widget(ColorPickerDropDown(options=THEME))
-		theme_example_layout = GridLayout(cols=2)
-		
-		
-		skip_button = StateShiftButton(text='Skip Generation',on_release=IM_G.switch_generate_behavior, size_hint=(1,None), size=(100,field_height))
-		
-		vid_params_label = Label(text='vid_params = ', size_hint=(None,None), size=(100,field_height))
-		self.vid_params_input = TextInput(text = "{'fps': 10,'codec': 'vp9','pixelformat': 'yuvj444p',}", multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors)
-		vid_params_layout = BoxLayout(orientation='horizontal')
-		#vid_params_layout.add_widget(vid_params_label)
-		#vid_params_layout.add_widget(self.vid_params_input)
-		
-		eval_guard_label = Label(text='f-strings are evaluated in guarded mode', size_hint=(1,None), size=(100,field_height))
-		self.eval_guard_button = DoubleEmojiButton(symbol1='🔰️', symbol2='⚠️',on_release=lambda eval_guard_button: self.switch_eval_behavior(eval_guard_button,eval_guard_label),size_hint=(None,None), size=(field_height,field_height))
-		eval_guard_layout = BoxLayout(orientation='horizontal')
-		eval_guard_layout.add_widget(self.eval_guard_button)
-		eval_guard_layout.add_widget(eval_guard_label)
-		
-		# Set up and add all the necessary elements for token handling
-		token_button = Button(text='Set token (DO NOT SHARE):', on_release=self.process_token, size_hint=(1,None), size=(100,field_height))
-		self.token_state = BGLabel(font_name='NotoEmoji', text='❔', background_color=[0.5, 0.5, 0.5, 1], size_hint=(None,None), size=(field_height,field_height))
-		token_layout = BoxLayout(orientation='horizontal')
-		self.token_input = TextInput(text=GS.AUTH, multiline=False, size_hint=(1,None), size=(100+field_height,field_height))
-		token_layout.add_widget(token_button)
-		token_layout.add_widget(self.token_state)
-		token_layout.add_widget(self.token_input)
-		self.copy_error_button = Button(text="Copy last error to clipboard", on_release=lambda btn: Clipboard.copy(GS.LAST_ERROR), size_hint=(1,None), size=(100,field_height), disabled=True)
-		
-		layout.add_widget(skip_button)
-		layout.add_widget(vid_params_layout)
-		layout.add_widget(eval_guard_layout)
-		layout.add_widget(token_layout)
-		layout.add_widget(self.copy_error_button)
-		
-		self.content = layout
-
-# Popup for configuring settings
-class FileHandlingWindow(Popup):
-	@handle_exceptions
-	def __init__(self, **kwargs):
-		super().__init__(**kwargs)
-		# Set up and add all the elements for the theme configurator
-		layout = BoxLayout(orientation='vertical')
-		
-		images_layout = BoxLayout(orientation='horizontal')
-		images_label = Label(text='Images:', size_hint=(None,None), size=(130,field_height))
-		self.images_input = TextInput(text = "placeholder 1", multiline=True, size_hint=(1, None), size=(100, field_height*3), **input_colors)
-		images_layout.add_widget(images_label)
-		images_layout.add_widget(self.images_input)
-		
-		videos_layout = BoxLayout(orientation='horizontal')
-		videos_label = Label(text='Videos:', size_hint=(None,None), size=(130,field_height))
-		self.videos_input = TextInput(text = "placeholder 2", multiline=True, size_hint=(1, None), size=(100, field_height*3), **input_colors)
-		videos_layout.add_widget(videos_label)
-		videos_layout.add_widget(self.videos_input)
-		
-		cc_layout = BoxLayout(orientation='horizontal')
-		cc_label = Label(text='Cluster Collages:', size_hint=(None,1), size=(130,field_height))
-		self.cc_input = TextInput(text = "placeholder 3", multiline=True, size_hint=(1, None), size=(100, field_height*3), **input_colors)
-		cc_layout.add_widget(cc_label)
-		cc_layout.add_widget(self.cc_input)
-		
-		settings_layout = BoxLayout(orientation='horizontal')
-		settings_label = Label(text='Settings:', size_hint=(None,None), size=(130,field_height))
-		self.settings_input = TextInput(text = "placeholder 4", multiline=True, size_hint=(1, None), size=(100, field_height*3), **input_colors)
-		settings_layout.add_widget(settings_label)
-		settings_layout.add_widget(self.settings_input)
-		
-		layout.add_widget(images_layout)
-		layout.add_widget(videos_layout)
-		layout.add_widget(cc_layout)
-		layout.add_widget(settings_layout)
-		
-		self.content = layout
-
-# Classes for the theme configurator
-class ThemeButton(Button):
-	@handle_exceptions
-	def __init__(self, starting_color, **kwargs):
-		super().__init__(**kwargs)
-		self.bind(size=self._update_rect, pos=self._update_rect)
-	
-	#Will be called once upon opening the dropdown and initializing these buttons
-	@handle_exceptions
-	def _update_rect(self, instance, value):
-		self.canvas.before.clear()
-		with self.canvas.before:
-			Color(*self.associated_dict['value'])
-			self.rect = Rectangle(pos=[self.pos[0]+self.size[0]+10,self.pos[1]+10], size=[30,30])
-			self.border1 = Line(rectangle=[self.rect.pos[0]-2, self.rect.pos[1]-2, self.rect.size[0]+4, self.rect.size[1]+4], width=2)
-			self.border2 = Line(rectangle=[self.rect.pos[0]-4, self.rect.pos[1]-4, self.rect.size[0]+8, self.rect.size[1]+8], width=2)
-			Color(0, 0, 0)
-			self.border3 = Line(rectangle=[self.rect.pos[0]-6, self.rect.pos[1]-6, self.rect.size[0]+12, self.rect.size[1]+12], width=2)
-			Color(1, 1, 1)
-			self.border4 = Line(rectangle=[self.rect.pos[0]-8, self.rect.pos[1]-8, self.rect.size[0]+16, self.rect.size[1]+16], width=2)
-
-	@handle_exceptions
-	def set_color(self, rgba):
-		# update the color of the rectangle
-		self.canvas.before.clear()
-		with self.canvas.before:
-			Color(*rgba)
-			self.rect = Rectangle(pos=[self.pos[0]+self.size[0]+10,self.pos[1]+10], size=[30,30])
-			self.border1 = Line(rectangle=[self.rect.pos[0]-2, self.rect.pos[1]-2, self.rect.size[0]+4, self.rect.size[1]+4], width=2)
-			self.border2 = Line(rectangle=[self.rect.pos[0]-4, self.rect.pos[1]-4, self.rect.size[0]+8, self.rect.size[1]+8], width=2)
-			Color(0, 0, 0)
-			self.border3 = Line(rectangle=[self.rect.pos[0]-6, self.rect.pos[1]-6, self.rect.size[0]+12, self.rect.size[1]+12], width=2)
-			Color(1, 1, 1)
-			self.border4 = Line(rectangle=[self.rect.pos[0]-8, self.rect.pos[1]-8, self.rect.size[0]+16, self.rect.size[1]+16], width=2)
-class ColorPickerDropDown(BoxLayout):
-	@handle_exceptions
-	def __init__(self, options, **kwargs):
-		super().__init__(**kwargs)
-		self.orientation = 'vertical'
-		self.options = options
-		self.dropdown = DropDown()
-		self.color_picker = ColorPicker()
-		self.color_picker.bind(color=self._on_color_picker_color)
-		self.dropdown_button = Button(text='', on_release=self.dropdown.open, size_hint=(1,None), height=field_height)
-		first=True
-		for option in self.options:
-			option_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=50)
-			color_button = ThemeButton(text=option["name"], starting_color=option["value"], size_hint_x=None, width=250)
-			color_button.associated_dict=option
-
-			option_box.add_widget(color_button)
-			self.dropdown.add_widget(option_box)
-
-			color_button.bind(on_release=lambda btn: self.dropdown.select(color_button))
-			color_button.bind(on_release=lambda btn, option=option: self._on_option_button_press(option,btn))
-			if first:
-				self._on_option_button_press(options[0],color_button)
-				first=False
-
-		self.add_widget(self.dropdown_button)
-		self.add_widget(self.color_picker)
-
-	@handle_exceptions
-	def _on_option_button_press(self, option, button):
-		self.selected_option = button
-		self.color_picker.color = option["value"]
-		self.dropdown_button.text = option["name"]
-
-	@handle_exceptions
-	def _on_color_picker_color(self, instance, selected_color):
-		self.selected_option.set_color(selected_color)
-		self.selected_option.associated_dict["value"]=selected_color
-
 # The main app
 class ClusterVisionF(App):
 	# Checks the attached list for newly generated image paths
+	# No @handle_exceptions since it has its own exception handling
 	def update_preview(self, time):
 		try:
-			new_image = PREVIEW_QUEUE.pop()
+			new_image = GS.PREVIEW_QUEUE.pop()
 			self.preview.load_image(new_image)
 		except:
 			pass
@@ -1134,7 +150,7 @@ class ClusterVisionF(App):
 	# Functions to enable file dropping. on_file_drop() is called when a file is dropped in the window, which calls load_settings_from_py() or load_settings_from_image()
 	# In order to handle files robustly even when data in them doesn't have the expected format every setting should be loaded with a try statement
 	# No @handle_exceptions for try_to_load() because it is expected to fail when encountering incomplete data and will report accordingly
-	def try_to_load(self, identifier, target, settings, keys, enabled, setattr_id=None):
+	def try_to_load(self, identifier, target, settings, keys, enabled, setattr_id = None, fallback = None):
 		try:
 			if enabled:
 				if type(keys) == list:
@@ -1150,8 +166,19 @@ class ClusterVisionF(App):
 						setattr(target, setattr_id, str(value))
 					else:
 						setattr(target, setattr_id, value)
+				return True
 		except:
-			print(f'Failed to load {identifier} from .py')
+			if fallback != None:
+				if setattr_id is None:
+					target = settings[key]
+				else:
+					if setattr_id == 'text':
+						setattr(target, setattr_id, str(fallback))
+					else:
+						setattr(target, setattr_id, fallback)
+				print(f'[Warning] Failed to load {identifier} from file, falling back to {fallback}')
+			else:
+				print(f'[Warning] Failed to load {identifier} from file')
 	@handle_exceptions
 	def on_file_drop(self, window, file_path, x, y):
 		# Check if file is a python file or image
@@ -1196,7 +223,7 @@ class ClusterVisionF(App):
 				self.scale_f.enabled = False
 				self.try_to_load('scale', self.scale_input_min, settings, 'scale', True, 'text')
 				self.try_to_load('scale', self.scale_input_max, settings, 'scale', True, 'text')
-		self.try_to_load('dynamic_thresholding', self.decrisp_button, settings, 'dynamic_thresholding', self.decrisp_import.enabled, 'enabled')
+		self.try_to_load('dynamic_thresholding', self.decrisp_button, settings, 'dynamic_thresholding', self.decrisp_import.enabled, 'enabled', False)
 		self.try_to_load('dynamic_thresholding_mimic_scale', self.decrisp_scale_input, settings, 'dynamic_thresholding_mimic_scale', self.decrisp_import.enabled, 'text')
 		self.try_to_load('dynamic_thresholding_percentile', self.decrisp_percentile_input, settings, 'dynamic_thresholding_percentile', self.decrisp_import.enabled, 'text')
 		self.try_to_load('img_mode_width', self.resolution_selector.resolution_width, settings, ['img_mode', 'width'], self.resolution_import.enabled, 'text')
@@ -1219,7 +246,7 @@ class ClusterVisionF(App):
 			else:
 				self.uc_f.enabled = False
 				self.try_to_load('negative_prompt', self.uc_input, settings, uc_label, True, 'text')
-
+		self.try_to_load('negative_prompt_strength', self.uccs_input, settings, 'negative_prompt_strength', self.uccs_import.enabled, 'text', 100)
 		if settings.get('collage_dimensions'):
 			self.try_to_load('collage_dimensions', self.cc_dim_width, settings, ['collage_dimensions', 0], self.cc_dim_import.enabled, 'text')
 			self.try_to_load('collage_dimensions', self.cc_dim_height, settings, ['collage_dimensions', 1], self.cc_dim_import.enabled, 'text')
@@ -1284,17 +311,19 @@ class ClusterVisionF(App):
 		if self.name_import.enabled: self.name_input.text = os.path.splitext(os.path.basename(file_path))[0]
 		if self.model_import.enabled:
 			if metadata["info"].get('Source'):
-				if metadata["info"]["Source"] == 'Stable Diffusion 1D09D794' or metadata["info"]["Source"] == 'Stable Diffusion F64BA557': # v1.2/1.3 
+				if metadata["info"]["Source"] == 'Stable Diffusion 1D09D794' or metadata["info"]["Source"] == 'Stable Diffusion F64BA557': # Furry: V1.2/1.3 
 					self.model_button.text = 'nai-diffusion-furry'
-				elif metadata["info"]["Source"] == 'Stable Diffusion 81274D13' or metadata["info"]["Source"] == 'Stable Diffusion 3B3287AF': # Initial release/silent update with ControlNet
+				elif metadata["info"]["Source"] == 'Stable Diffusion 81274D13' or metadata["info"]["Source"] == 'Stable Diffusion 3B3287AF': # Anime Full V1: Initial release/silent update with ControlNet
 					self.model_button.text = 'nai-diffusion'
-				elif metadata["info"]["Source"] == 'Stable Diffusion 1D44365E' or metadata["info"]["Source"] == 'Stable Diffusion F4D50568': # Initial release/silent update with ControlNet
+				elif metadata["info"]["Source"] == 'Stable Diffusion 1D44365E' or metadata["info"]["Source"] == 'Stable Diffusion F4D50568': # Anime Safe V1: Initial release/silent update with ControlNet
 					self.model_button.text = 'safe-diffusion'
+				elif metadata["info"]["Source"] == 'Stable Diffusion F1022D28': # Anime Full V2
+					self.model_button.text = 'nai-diffusion-2'
 				elif metadata["info"]["Source"] == 'Stable Diffusion': # This should normally not be encountered but some images in the past were generated like this due to a bug on NAI's side
-					print(f"The loaded picture doesn't have the model specified. Defaulting to NAID Full, but be aware the original model for this picture might have been different")
+					print(f"[Warning] The loaded picture doesn't have the model specified. Defaulting to NAID Full, but be aware the original model for this picture might have been different")
 					self.model_button.text = 'nai-diffusion'
 				else:
-					print(f'Error while determining model, defaulting to Full')
+					print(f'[Warning] Error while determining model, defaulting to Full')
 					self.model_button.text = 'nai-diffusion'
 		self.steps_f.enabled = False
 		self.scale_f.enabled = False
@@ -1332,7 +361,7 @@ class ClusterVisionF(App):
 					self.is_sampler_smea.enabled = False
 					self.is_sampler_dyn.enabled = False
 		if self.decrisp_import.enabled:
-			self.try_to_load('dynamic_thresholding', self.decrisp_button, comment_dict, 'dynamic_thresholding', True, 'enabled')
+			self.try_to_load('dynamic_thresholding', self.decrisp_button, comment_dict, 'dynamic_thresholding', True, 'enabled', False)
 			self.try_to_load('dynamic_thresholding_mimic_scale', self.decrisp_scale_input, comment_dict, 'dynamic_thresholding_mimic_scale', True, 'text')
 			self.try_to_load('dynamic_thresholding_percentile', self.decrisp_percentile_input, comment_dict, 'dynamic_thresholding_percentile', True, 'text')
 		if self.prompt_import.enabled:
@@ -1344,6 +373,7 @@ class ClusterVisionF(App):
 				self.uc_input.text = comment_dict["uc"]
 			else:
 				self.try_to_load('negative_prompt', self.uc_input, comment_dict,'negative_prompt', True, 'text')
+		self.try_to_load('negative_prompt_strength', self.uccs_input, comment_dict, 'uncond_scale', self.uccs_import.enabled, 'text', 100)
 		print(f'Loading from picture successful')
 
 	# Functions needed for the steps slider
@@ -1357,14 +387,13 @@ class ClusterVisionF(App):
 	# build() is the main function which creates the main window of the app
 	# No @handle_exceptions for build() because it's part of the main thread, so crashes get reported, and this function is all or nothing for the GUI anyway
 	def build(self):
-		IM_G.update_global_img_gen('PREVIEW_QUEUE', PREVIEW_QUEUE)
 		self.icon = 'ClusterVisionF.ico'
 		# Binding the file dropping function
 		Window.bind(on_drop_file=self.on_file_drop)
 		Window.size = (1850, 1000)
-		Window.clearcolor = GS.THEME[3]['value']
-		self.config_window = ConfigWindow(title='Configure Settings')
-		self.file_handling_window = FileHandlingWindow(title='File Handling (the f-strings here determine how the folder structure for created files look)')
+		Window.clearcolor = GS.THEME["ProgBg"]['value']
+		self.config_window = KW.ConfigWindow(title='Configure Settings')
+		self.file_handling_window = KW.FileHandlingWindow(title='File Handling (the f-strings here determine how the folder structure for created files look)')
 		layout = BoxLayout(orientation='vertical', spacing=10, padding=10)
 
 		# Mode Switcher and config window buttons
@@ -1373,32 +402,27 @@ class ClusterVisionF(App):
 		settings_button.font_name = 'NotoEmoji'
 		file_handling_button = Button(text='📁', font_size=font_large, on_release=self.file_handling_window.open, **imp_row_size1, **button_colors)
 		file_handling_button.font_name = 'NotoEmoji'
-		self.mode_switcher = ModeSwitcher(app=self, size_hint=(1, None), size=(100, field_height))
+		self.mode_switcher = KW.ModeSwitcher(app=self, size_hint=(1, None), size=(100, field_height))
 		mode_switcher_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, field_height))
 		#mode_switcher_layout.add_widget(file_handling_button)
 		mode_switcher_layout.add_widget(self.mode_switcher)
 	
 		# Name
 		name_label = Label(text='Name:', **l_row_size1, **label_color)
-		self.name_import = ImportButton(**imp_row_size1)
+		self.name_import = KW.ImportButton(**imp_row_size1)
 		self.name_input = TextInput(multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors)
 
 		# Folder Name
 		folder_name_label = Label(text='Folder Name:', **l_row_size1, **label_color)
-		self.folder_name_import = ImportButton(**imp_row_size1)
+		self.folder_name_import = KW.ImportButton(**imp_row_size1)
 		self.folder_name_input = TextInput(multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors)
-
-		# Enumerator Plus
-		enumerator_plus_label = Label(text='Enumerator Plus:', **l_row_size1, **label_color)
-		self.enumerator_plus_import = ImportButton(**imp_row_size1)
-		self.enumerator_plus_input = TextInput(multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors)
 
 		# Model
 		self.model_label = Label(text='Model:', **l_row_size1, **label_color)
-		self.model_import = ImportButton(**imp_row_size1)
+		self.model_import = KW.ImportButton(**imp_row_size1)
 		
 		self.model_dropdown = DropDown()
-		self.model_button = ScrollDropDownButton(self.model_dropdown, text='nai-diffusion', size_hint=(1, None), size=(100, field_height), **button_colors)
+		self.model_button = KW.ScrollDropDownButton(self.model_dropdown, text='nai-diffusion', size_hint=(1, None), size=(100, field_height), **button_colors)
 		self.model_button.bind(on_release=self.model_dropdown.open)
 
 		for model_name in MODELS.values():
@@ -1409,15 +433,15 @@ class ClusterVisionF(App):
 
 		# Seed - Cluster Collage
 		cc_seed_label = Label(text='Seed:', **l_row_size2, **label_color)
-		self.cc_seed_import = ImportButton(**imp_row_size2)
-		self.cc_seed_grid=SeedGrid(size_hint=(1, 1))
+		self.cc_seed_import = KW.ImportButton(**imp_row_size2)
+		self.cc_seed_grid=KW.SeedGrid(size_hint=(1, 1))
 
 		# Seed - Image Sequence
 		is_seed_label = Label(text='Seed:', **l_row_size1, **label_color)
-		self.is_seed_import = ImportButton(**imp_row_size1)
+		self.is_seed_import = KW.ImportButton(**imp_row_size1)
 		is_seed_randomize = Button(text='Randomize', size_hint=(None, None), size=(100, field_height), **button_colors)
 		is_seed_clear = Button(text='Clear', size_hint=(None, None), size=(60, field_height), **button_colors)
-		self.is_seed_input = ScrollInput(min_value=0, max_value=4294967295, increment=1000, text='', multiline=False, size_hint=(1, None), size=(100, field_height), allow_empty=True, **input_colors)
+		self.is_seed_input = KW.SeedScrollInput(min_value=0, max_value=4294967295, increment=1000, text='', multiline=False, size_hint=(1, None), size=(100, field_height), allow_empty=True, **input_colors)
 		is_seed_randomize.bind(on_release=lambda btn: setattr(self.is_seed_input, 'text', str(IM_G.generate_seed())))
 		is_seed_clear.bind(on_release=lambda btn: setattr(self.is_seed_input, 'text', ''))
 		is_seed_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, field_height))
@@ -1427,7 +451,7 @@ class ClusterVisionF(App):
 
 		# Steps
 		steps_label = Label(text='Steps:', **l_row_size1, **label_color)
-		self.steps_import = ImportButton(**imp_row_size1)
+		self.steps_import = KW.ImportButton(**imp_row_size1)
 		steps_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, field_height))
 		self.steps_slider_min = Slider(min=1, max=100, value=28, step=1)
 		self.steps_counter_min = Label(text=str(28), size_hint=(None, None), size=(50, field_height), **label_color)
@@ -1440,11 +464,8 @@ class ClusterVisionF(App):
 		steps_layout.add_widget(self.steps_slider_max)
 		steps_layout.add_widget(self.steps_counter_max)
 		# Create the f-string variant
-		self.steps_input_f = ScrollInput(min_value=1, max_value=50, fi_mode=None, increment=1, text='⁅(c+1)⁆', multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors, font_size=font_small,font_name='Unifont')
-		self.steps_f = StateFButton(self.mode_switcher, steps_layout, self.steps_input_f, None, size_hint=(None, None), size=(field_height, field_height))
-		self.steps_f.standard_widgets = [steps_layout]
-		self.steps_f.f_widgets = [self.steps_input_f]
-		self.mode_switcher.hide_widgets([self.steps_input_f])
+		self.steps_input_f = KW.FScrollInput(min_value=1, max_value=50, fi_mode=None, increment=1, text='⁅(c+1)⁆', multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors, font_size=font_small,font_name='Unifont')
+		self.steps_f = KW.StateFButton(self.mode_switcher, steps_layout, self.steps_input_f, None, [steps_layout], [self.steps_input_f], size_hint=(None, None), size=(field_height, field_height))
 		steps_super_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, field_height))
 		steps_super_layout.add_widget(self.steps_f)
 		steps_super_layout.add_widget(steps_layout)
@@ -1452,19 +473,16 @@ class ClusterVisionF(App):
 
 		# Scale
 		scale_label = Label(text='Scale:', **l_row_size1, **label_color)
-		self.scale_import = ImportButton(**imp_row_size1)
+		self.scale_import = KW.ImportButton(**imp_row_size1)
 		scale_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, field_height))
 		#The API actually accepts much, much higher scale values, though there really seems no point in going higher than 100 at all
-		self.scale_input_min = ScrollInput(min_value=1.1, max_value=1000, fi_mode=float, increment=0.1, text='10', multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors, font_size=font_small)
-		self.scale_input_max = ScrollInput(min_value=1.1, max_value=1000, fi_mode=float, increment=0.1, text='10', multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors, font_size=font_small)
+		self.scale_input_min = KW.ScrollInput(min_value=1.1, max_value=1000, fi_mode=float, increment=0.1, text='10', multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors, font_size=font_small)
+		self.scale_input_max = KW.ScrollInput(min_value=1.1, max_value=1000, fi_mode=float, increment=0.1, text='10', multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors, font_size=font_small)
 		scale_layout.add_widget(self.scale_input_min)
 		scale_layout.add_widget(self.scale_input_max)
 		# Create the f-string variant
-		self.scale_input_f = ScrollInput(min_value=1.1, max_value=1000, fi_mode=None, increment=0.1, text='⁅r+1⁆', multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors, font_size=font_small,font_name='Unifont')
-		self.scale_f = StateFButton(self.mode_switcher, scale_layout, self.scale_input_f, None, size_hint=(None, None), size=(field_height, field_height))
-		self.scale_f.standard_widgets = [scale_layout]
-		self.scale_f.f_widgets = [self.scale_input_f]
-		self.mode_switcher.hide_widgets([self.scale_input_f])
+		self.scale_input_f = KW.FScrollInput(min_value=1.1, max_value=1000, fi_mode=None, increment=0.1, text='⁅r+1⁆', multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors, font_size=font_small,font_name='Unifont')
+		self.scale_f = KW.StateFButton(self.mode_switcher, scale_layout, self.scale_input_f, None, [scale_layout], [self.scale_input_f], size_hint=(None, None), size=(field_height, field_height))
 		scale_super_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, field_height))
 		scale_super_layout.add_widget(self.scale_f)
 		scale_super_layout.add_widget(scale_layout)
@@ -1473,13 +491,13 @@ class ClusterVisionF(App):
 
 		# Sampler - Cluster Collage
 		cc_sampler_label = Label(text='Sampler:', **l_row_size1, **label_color)	
-		self.cc_sampler_import = ImportButton(size_hint = (None, None), size = (field_height, field_height*2))
+		self.cc_sampler_import = KW.ImportButton(size_hint = (None, None), size = (field_height, field_height*2))
 		self.cc_sampler_input = TextInput(multiline=True, size_hint=(1, 1), height=field_height*2, **input_colors)
 		cc_clear_button = Button(text='Clear', size_hint=(None, 1), size=(60, field_height*2), **button_colors)
 		cc_clear_button.bind(on_release=lambda button: setattr(self.cc_sampler_input, 'text', ''))
 		cc_sampler_button = Button(text='Add Sampler', size_hint=(None, 1), size=(150, field_height*2), **button_colors)
 
-		cc_sampler_injector = ConditionalInjectorDropdown(size_hint=(None, 1), width=field_height, dropdown_list=GS.NAI_SAMPLERS, button_text='+', target=self.cc_sampler_input, inject_identifier='S')
+		cc_sampler_injector = KW.ConditionalInjectorDropdown(size_hint=(None, 1), width=field_height, dropdown_list=GS.NAI_SAMPLERS, button_text='+', target=self.cc_sampler_input, inject_identifier='S')
 		cc_sampler_dropdown = DropDown()
 
 		cc_sampler_layout = BoxLayout(orientation='horizontal',size_hint=(1, None), height=field_height*2)
@@ -1489,9 +507,9 @@ class ClusterVisionF(App):
 
 		# Sampler - Image Sequence
 		is_sampler_label = Label(text='Sampler:', **l_row_size1, **label_color)		
-		self.is_sampler_import = ImportButton(**imp_row_size1)
+		self.is_sampler_import = KW.ImportButton(**imp_row_size1)
 		is_sampler_dropdown = DropDown()
-		self.is_sampler_button = ScrollDropDownButton(is_sampler_dropdown, text='k_dpmpp_2m', size_hint=(1, None), size=(100, field_height), **button_colors)
+		self.is_sampler_button = KW.ScrollDropDownButton(is_sampler_dropdown, text='k_dpmpp_2m', size_hint=(1, None), size=(100, field_height), **button_colors)
 		self.is_sampler_button.bind(on_release=is_sampler_dropdown.open)
 		for sampler_name in GS.NAI_SAMPLERS_RAW:
 			btn = Button(text=sampler_name, size_hint_y=None, height=field_height, **dp_button_colors)
@@ -1500,23 +518,23 @@ class ClusterVisionF(App):
 		is_sampler_dropdown.bind(on_select=lambda instance, x: setattr(self.is_sampler_button, 'text', x))
 		
 		is_sampler_layout = BoxLayout(orientation='horizontal',size_hint=(1, None), height=field_height)
-		self.is_sampler_smea = StateShiftButton(text='SMEA', size_hint=(None, 1), size=(80,field_height))
-		self.is_sampler_dyn = StateShiftButton(text='Dyn', size_hint=(None, 1), size=(80,field_height))
+		self.is_sampler_smea = KW.StateShiftButton(text='SMEA', size_hint=(None, 1), size=(80,field_height))
+		self.is_sampler_dyn = KW.StateShiftButton(text='Dyn', size_hint=(None, 1), size=(80,field_height))
 
-		self.is_sampler_smea.bind(enabled=lambda instance, value: on_smea_disabled(value, self.is_sampler_dyn))
-		self.is_sampler_dyn.bind(enabled=lambda instance, value: on_dyn_enabled(value, self.is_sampler_smea))
+		self.is_sampler_smea.bind(enabled=lambda instance, value: KW.on_smea_disabled(value, self.is_sampler_dyn))
+		self.is_sampler_dyn.bind(enabled=lambda instance, value: KW.on_dyn_enabled(value, self.is_sampler_smea))
 		is_sampler_layout.add_widget(self.is_sampler_button)
 		is_sampler_layout.add_widget(self.is_sampler_smea)
 		is_sampler_layout.add_widget(self.is_sampler_dyn)
 
 		# Decrisper
 		decrisp_label = Label(text='Decrisper:', **l_row_size1, **label_color)
-		self.decrisp_import = ImportButton(**imp_row_size1)
-		self.decrisp_button = StateShiftButton(text='Decrisper', size_hint=(None, None), size=(90,field_height))
+		self.decrisp_import = KW.ImportButton(**imp_row_size1)
+		self.decrisp_button = KW.StateShiftButton(text='Decrisper', size_hint=(None, None), size=(90,field_height))
 		decrisp_scale = Label(text='Mimic Scale:', size_hint=(None, None), size=(100, field_height), **label_color)
-		self.decrisp_scale_input = ScrollInput(min_value=-10000, max_value=10000, fi_mode=None, increment=0.1, text='10', multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors, font_size=font_small,font_name='Unifont')
+		self.decrisp_scale_input = KW.FScrollInput(min_value=-10000, max_value=10000, fi_mode=None, increment=0.1, text='10', multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors, font_size=font_small,font_name='Unifont')
 		decrisp_percentile = Label(text='Percentile:', size_hint=(None, None), size=(90, field_height), **label_color)
-		self.decrisp_percentile_input = ScrollInput(min_value=0.000001, max_value=1, fi_mode=None, increment=0.001, text='0.999', multiline=False, size_hint=(1, None), size=(100, field_height), round_value=6, **input_colors, font_size=font_small,font_name='Unifont')
+		self.decrisp_percentile_input = KW.FScrollInput(min_value=0.000001, max_value=1, fi_mode=None, increment=0.001, text='0.999', multiline=False, size_hint=(1, None), size=(100, field_height), round_value=6, **input_colors, font_size=font_small,font_name='Unifont')
 		decrisp_layout = BoxLayout(orientation='horizontal',size_hint=(1, None), height=field_height)
 		decrisp_layout.add_widget(self.decrisp_button)
 		decrisp_layout.add_widget(decrisp_scale)
@@ -1526,80 +544,90 @@ class ClusterVisionF(App):
 		
 		# Resolution
 		resolution_label = Label(text='Resolution:', **l_row_size1, **label_color)
-		self.resolution_import = ImportButton(**imp_row_size1)
-		self.resolution_selector = ResolutionSelector()
+		self.resolution_import = KW.ImportButton(**imp_row_size1)
+		self.resolution_selector = KW.ResolutionSelector()
 
 		# Prompt
 		prompt_label = Label(text='Prompt:', **l_row_size2, **label_color)
 		prompt_buttons_layout = BoxLayout(orientation='vertical', **imp_row_size2)
-		self.prompt_import = ImportButton()
+		self.prompt_import = KW.ImportButton()
 		self.prompt_input = TextInput(multiline=True, size_hint=(1, 1), size=(100, field_height*4), **input_colors)
 		self.prompt_input.font_size = 23
 		self.prompt_input.font_name = 'Unifont'
-		prompt_injector = InjectorDropdown(dropdown_list=PROMPT_CHUNKS, button_text='+', target=self.prompt_input)
+		prompt_injector = KW.InjectorDropdown(dropdown_list=PROMPT_CHUNKS, button_text='+', target=self.prompt_input)
 		
 		prompt_buttons_layout.add_widget(prompt_injector)
 		prompt_buttons_layout.add_widget(self.prompt_import)
 		
 		prompt_layout = BoxLayout(orientation='horizontal')
-		prompt_token_counter=TokenCostBar(clip_calculator, MAX_TOKEN_COUNT, size_hint=(None, 1), width=20)
+		prompt_token_counter=KW.TokenCostBar(clip_calculator, MAX_TOKEN_COUNT, size_hint=(None, 1), width=20)
 		prompt_layout.add_widget(self.prompt_input)
 		prompt_layout.add_widget(prompt_token_counter)
 		self.prompt_input.bind(text=prompt_token_counter.calculate_token_cost)
 		# Create the f-string variant
-		self.prompt_f_input = PromptGrid(size_hint=(1, 1), size=(100, field_height*4))
-		self.prompt_f = StateFButton(self.mode_switcher, self.prompt_input, self.prompt_f_input.prompt_inputs[0], prompt_injector)
+		self.prompt_f_input = KW.PromptGrid(size_hint=(1, 1), size=(100, field_height*4))
 		prompt_layout.add_widget(self.prompt_f_input)
-		self.prompt_f.standard_widgets = prompt_layout.children[1:]
-		self.prompt_f.f_widgets = [prompt_layout.children[0]]
-		self.mode_switcher.hide_widgets([prompt_layout.children[0]])
+		self.prompt_f = KW.StateFButton(self.mode_switcher, self.prompt_input, self.prompt_f_input.prompt_inputs[0], prompt_injector, prompt_layout.children[1:], [prompt_layout.children[0]], enabled=False)
 		prompt_buttons_layout.add_widget(self.prompt_f)
 
 		# UC
 		uc_label = Label(text='Neg. Prompt:', **l_row_size2, **label_color)
 		uc_buttons_layout = BoxLayout(orientation='vertical', **imp_row_size2)
-		self.uc_import = ImportButton()
+		self.uc_import = KW.ImportButton()
 		self.uc_input = TextInput(multiline=True, size_hint=(1, 1), size=(100, field_height*4), **input_colors)
 		self.uc_input.font_size = 23
 		self.uc_input.font_name = 'Unifont'
-		uc_injector = InjectorDropdown(dropdown_list=UC_CHUNKS, button_text='+', target=self.uc_input, inject_identifier='UC')
+		uc_injector = KW.InjectorDropdown(dropdown_list=UC_CHUNKS, button_text='+', target=self.uc_input, inject_identifier='UC')
 		
 		uc_buttons_layout.add_widget(uc_injector)
 		uc_buttons_layout.add_widget(self.uc_import)
 		
 		uc_layout = BoxLayout(orientation='horizontal')
-		uc_token_counter=TokenCostBar(clip_calculator, MAX_TOKEN_COUNT, size_hint=(None, 1), width=20)
+		uc_token_counter=KW.TokenCostBar(clip_calculator, MAX_TOKEN_COUNT, size_hint=(None, 1), width=20)
 		uc_layout.add_widget(self.uc_input)
 		uc_layout.add_widget(uc_token_counter)
 		self.uc_input.bind(text=uc_token_counter.calculate_token_cost)
 		# Create the f-string variant
-		self.uc_f_input = PromptGrid(size_hint=(1, 1), size=(100, field_height*4))
-		self.uc_f = StateFButton(self.mode_switcher, self.uc_input, self.uc_f_input.prompt_inputs[0], uc_injector)
+		self.uc_f_input = KW.PromptGrid(size_hint=(1, 1), size=(100, field_height*4))
 		uc_layout.add_widget(self.uc_f_input)
-		self.uc_f.standard_widgets = uc_layout.children[1:]
-		self.uc_f.f_widgets = [uc_layout.children[0]]
-		self.mode_switcher.hide_widgets([uc_layout.children[0]])
+		self.uc_f = KW.StateFButton(self.mode_switcher, self.uc_input, self.uc_f_input.prompt_inputs[0], uc_injector, uc_layout.children[1:], [uc_layout.children[0]], enabled=False)
 		uc_buttons_layout.add_widget(self.uc_f)
+
+		# UC Content Strength
+		uccs_label = Label(text='NP Strength:', **l_row_size1, **label_color)
+		self.uccs_import = KW.ImportButton(**imp_row_size1)
+		uccs_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=field_height)
+
+		uccs_slider = Slider(min=0, max=500, value=100, size_hint=(1, None), height=field_height)
+		self.uccs_input = KW.FScrollInput(min_value=0, max_value=1000, fi_mode=float, text='100', size_hint=(None, None), width=200, height=field_height, **input_colors)
+		uccs_percent_label = Label(text='%', size_hint=(None, None), width=40, height=field_height, **label_color)
+
+		uccs_slider.bind(value=handle_exceptions(lambda instance, value: setattr(self.uccs_input, 'text', str(value))))
+		self.uccs_input.bind(text=handle_exceptions(lambda instance, value: setattr(uccs_slider, 'value', float(value) if value else 0)))
+
+		uccs_layout.add_widget(uccs_slider)
+		uccs_layout.add_widget(self.uccs_input)
+		uccs_layout.add_widget(uccs_percent_label)
 
 		# Collage Dimensions
 		cc_dim_label = Label(text='Collage Dim.:', **l_row_size1, **label_color)
-		self.cc_dim_import = ImportButton(**imp_row_size1)
+		self.cc_dim_import = KW.ImportButton(**imp_row_size1)
 		cc_dim_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=field_height)
-		self.cc_dim_width = ScrollInput(text='3', size_hint=(1, None), width=60, height=field_height, **input_colors)
-		self.cc_dim_height = ScrollInput(text='3', size_hint=(1, None), width=60, height=field_height, **input_colors)
+		self.cc_dim_width = KW.ScrollInput(text='3', size_hint=(1, None), width=60, height=field_height, **input_colors)
+		self.cc_dim_height = KW.ScrollInput(text='3', size_hint=(1, None), width=60, height=field_height, **input_colors)
 		cc_dim_layout.add_widget(self.cc_dim_width)
 		cc_dim_layout.add_widget(self.cc_dim_height)
 
 		# Image Sequence Quantity
 		is_range_label = Label(text='Quantity/FPS:', **l_row_size1, **label_color)
-		self.is_range_import = ImportButton(**imp_row_size1)
+		self.is_range_import = KW.ImportButton(**imp_row_size1)
 		is_range_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=field_height)
-		self.is_quantity = ScrollInput(text='28', min_value=1, max_value=100000, size_hint=(1, None), width=60, height=field_height, **input_colors)
-		self.is_video = StateShiftButton(text='🎬',font_name='NotoEmoji')
+		self.is_quantity = KW.ScrollInput(text='28', min_value=1, max_value=100000, size_hint=(1, None), width=60, height=field_height, **input_colors)
+		self.is_video = KW.StateShiftButton(text='🎬',font_name='NotoEmoji')
 		is_range_layout.add_widget(self.is_quantity)
 		is_range_layout.add_widget(self.is_video)
 		is_fps_label = Label(text='FPS:', size_hint=(None, None), size=(60,field_height), **label_color)
-		self.is_fps = ScrollInput(text=str(GS.BASE_FPS), min_value=1, max_value=144, size_hint=(1, None), width=60, height=field_height, **input_colors)
+		self.is_fps = KW.ScrollInput(text=str(GS.BASE_FPS), min_value=1, max_value=144, size_hint=(1, None), width=60, height=field_height, **input_colors)
 		is_range_layout.add_widget(is_fps_label)
 		is_range_layout.add_widget(self.is_fps)
 
@@ -1617,6 +645,7 @@ class ClusterVisionF(App):
 		action_buttons_layout.add_widget(self.process_button)
 
 		# Add all elements to input_layout, which is the primary block for interactions on the left, split into the label/button/input columns
+
 		input_layout = GridLayout(cols=3)
 		input_layout.add_widget(mode_label)
 		input_layout.add_widget(settings_button)
@@ -1674,6 +703,10 @@ class ClusterVisionF(App):
 		input_layout.add_widget(uc_buttons_layout)
 		input_layout.add_widget(uc_layout)
 
+		input_layout.add_widget(uccs_label)
+		input_layout.add_widget(self.uccs_import)
+		input_layout.add_widget(uccs_layout)
+
 		input_layout.add_widget(cc_dim_label)
 		input_layout.add_widget(self.cc_dim_import)
 		input_layout.add_widget(cc_dim_layout)
@@ -1685,31 +718,32 @@ class ClusterVisionF(App):
 		input_layout.add_widget(action_buttons_label)
 		input_layout.add_widget(Label(text='',size_hint=(None, None),size=(0,0)))
 		input_layout.add_widget(action_buttons_layout)
-		
+
 		# In the middle is the meta_layout with the console and a some more relevant buttons
-		console = Console()
 		task_state_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=field_height)
 		self.cancel_button = Button(text='⬛', font_name='Unifont',size_hint=(None, None), size=(field_height,field_height), **button_colors)
-		self.cancel_button.bind(on_release=IM_G.cancel_processing)
-		self.pause_button = PauseButton(**imp_row_size1)
-		self.pause_button.bind(on_release=IM_G.switch_pause)
-		overwrite_button = StateShiftButton(text='Overwrite Images', size_hint=(1, None), size=(70,field_height), font_size=font_small)
-		overwrite_button.bind(on_release=IM_G.switch_overwrite_behavior)
+		self.cancel_button.bind(on_release=lambda instance: setattr(GS, 'PAUSE_REQUEST', False))
+		self.cancel_button.bind(on_release=lambda instance: setattr(GS, 'CANCEL_REQUEST', True))
+
+		self.pause_button = KW.PauseButton(**imp_row_size1)
+		self.pause_button.bind(on_release=lambda instance: setattr(GS, 'PAUSE_REQUEST', not GS.PAUSE_REQUEST))
+		overwrite_button = KW.StateShiftButton(text='Overwrite Images', size_hint=(1, None), size=(70,field_height), font_size=font_small)
+		overwrite_button.bind(on_release=lambda instance: setattr(GS, 'OVERWRITE_IMAGES', not GS.OVERWRITE_IMAGES))
 		self.wipe_queue_button = Button(text='Wipe Queue', size_hint=(1, None), size=(60,field_height), **button_colors)
 		self.wipe_queue_button.bind(on_release=IM_G.wipe_queue)
 		task_state_layout.add_widget(self.pause_button)
 		task_state_layout.add_widget(self.cancel_button)
 		task_state_layout.add_widget(overwrite_button)
 		task_state_layout.add_widget(self.wipe_queue_button)
-		
+
 		meta_layout = BoxLayout(orientation='vertical', size_hint=(0.5, 1))
-		meta_layout.add_widget(console)
+		meta_layout.add_widget(KW.Console())
 		meta_layout.add_widget(task_state_layout)
-		
-		# The ImagePreview goes currently alone on the right
-		self.preview = ImagePreview()
-		
-		# The super_layout is highest layout in the hierarchy and this also the one that is returned for Kivy to display
+
+		# The KW.ImagePreview goes currently alone on the right
+		self.preview = KW.ImagePreview()
+
+		# The super_layout is highest layout in the hierarchy and is also the one that is returned for Kivy to display
 		# It has the user interaction section left, the console/metadata section in the middle, and the image preview on the right		
 		self.super_layout = BoxLayout(orientation='horizontal')
 		self.super_layout.add_widget(input_layout)
@@ -1723,7 +757,7 @@ class ClusterVisionF(App):
 			is_seed_label, self.is_seed_import, is_seed_layout,
 			is_range_label, self.is_range_import, is_range_layout]
 		self.non_cs_widgets = [is_sampler_label, self.is_sampler_import, is_sampler_layout, is_seed_label, self.is_seed_import, is_seed_layout]
-		self.import_buttons = [self.name_import, self.folder_name_import, self.enumerator_plus_import, self.model_import, self.cc_seed_import, self.is_seed_import,
+		self.import_buttons = [self.name_import, self.folder_name_import, self.model_import, self.cc_seed_import, self.is_seed_import,
 			self.steps_import, self.scale_import, self.cc_sampler_import, self.is_sampler_import, self.resolution_import, self.prompt_import, self.uc_import,
 			self.cc_dim_import, self.is_range_import]
 
@@ -1731,6 +765,7 @@ class ClusterVisionF(App):
 		Clock.schedule_interval(self.update_preview, 0.2)
 		self.pause_button.disabled = True
 		self.cancel_button.disabled = True
+
 		return self.super_layout
 
 	# This function checks the validity of passed settings
@@ -1749,13 +784,67 @@ class ClusterVisionF(App):
 		if empty_field: print('\n')
 		return empty_field
 
+	# This function generates a single image like any other UI would do, just that it has to be aware of which fields are active and which to use
+	@handle_exceptions
+	def generate_single_image(self, instance):
+		GS.CANCEL_REQUEST = False
+		blank_eval_dict = {'n':0,'c':0,'r':0,'cc':0,'s':0}
+		if self.mode_switcher.cc_active:
+			if not self.cc_seed_grid.seed_inputs[0].text == '':
+				seed = self.cc_seed_grid.seed_inputs[0].text
+			else:
+				seed = str(IM_G.generate_seed())
+			if self.cc_sampler_input.text.__contains__(','):
+				sampler = self.cc_sampler_input.text.split(", ")[0]
+			else:
+				sampler = self.cc_sampler_input.text
+		else:
+			if not self.is_seed_input.text == '':
+				seed = self.is_seed_input.text
+			else:
+				seed = str(IM_G.generate_seed())
+			sampler = self.is_sampler_button.text
+			if self.is_sampler_dyn.enabled:
+				sampler+='_dyn'
+			elif self.is_sampler_smea.enabled:
+					sampler+='_smea'
+		settings = {'name': self.name_input.text,
+		'folder_name': self.folder_name_input.text,
+		'folder_name_extra': '',
+		'model': self.model_button.text,
+		'seed': int(seed),
+		'sampler': sampler,
+		'scale': float(TM.f_string_processor([['f"""'+self.scale_input_f.text+'"""']],self.config_window.eval_guard_button.enabled,blank_eval_dict)) if self.scale_f.enabled else
+		float(self.scale_input_min.text),
+		'steps': int(TM.f_string_processor([['f"""'+self.steps_input_f.text+'"""']],self.config_window.eval_guard_button.enabled,blank_eval_dict)) if self.steps_f.enabled else
+		int(self.steps_slider_min.value),
+		'img_mode': {'width': int(self.resolution_selector.resolution_width.text),
+								'height': int(self.resolution_selector.resolution_height.text)},
+		'prompt': TM.f_string_processor([['f"""' + self.prompt_f_input.prompt_inputs[i].text + '"""'] for i in range(self.prompt_f_input.prompt_rows)],self.config_window.eval_guard_button.enabled,blank_eval_dict) if self.prompt_f.enabled else
+		self.prompt_input.text,
+		'negative_prompt': TM.f_string_processor([['f"""' + self.uc_f_input.prompt_inputs[i].text + '"""'] for i in range(self.uc_f_input.prompt_rows)],self.config_window.eval_guard_button.enabled,blank_eval_dict)if self.uc_f.enabled else
+		self.uc_input.text,
+		'negative_prompt_strength': self.uccs_input.text,
+		'dynamic_thresholding': self.decrisp_button.enabled,
+		'dynamic_thresholding_mimic_scale': float(TM.f_string_processor([['f"""'+self.decrisp_scale_input.text+'"""']],self.config_window.eval_guard_button.enabled,blank_eval_dict)) if self.decrisp_button.enabled else 10,
+		'dynamic_thresholding_percentile': float(TM.f_string_processor([['f"""'+self.decrisp_percentile_input.text+'"""']],self.config_window.eval_guard_button.enabled,blank_eval_dict)) if self.decrisp_button.enabled else 0.999,}
+		if self.check_settings(None, settings):
+			return
+		print(settings)
+		self.single_img_button.disabled = True
+		self.queue_button.disabled = True
+		self.process_button.disabled = True
+		self.cancel_button.disabled = False
+		self.wipe_queue_button.disabled = True
+		future = GS.EXECUTOR.submit(IM_G.generate_as_is,settings,'')
+		future.add_done_callback(self.on_process_complete)
+
 	# This function is responsible for taking all of the settings in the UI and queueing the desired task
 	@handle_exceptions
 	def on_queue_button_press(self, instance):
 		# Get shared settings from text inputs and sliders
 		name = self.name_input.text
 		folder_name = self.folder_name_input.text
-		enumerator_plus = self.enumerator_plus_input.text
 		model = self.model_button.text
 		if self.steps_f.enabled:
 			steps = self.steps_input_f.text
@@ -1779,9 +868,10 @@ class ClusterVisionF(App):
 			uc = [['f"""' + self.uc_f_input.prompt_inputs[i].text + '"""'] for i in range(self.uc_f_input.prompt_rows)]
 		else:
 			uc = self.uc_input.text
-		settings = {'name': name, 'folder_name': folder_name, 'enumerator_plus': enumerator_plus, 'model': model, 'scale': scale, 'steps': steps, 'img_mode': img_mode,
-		'prompt': prompt, 'negative_prompt': uc, 'dynamic_thresholding': self.decrisp_button.enabled, 'dynamic_thresholding_mimic_scale': self.decrisp_scale_input.text,
-		'dynamic_thresholding_percentile': self.decrisp_percentile_input.text,}
+		settings = {'name': name, 'folder_name': folder_name, 'model': model, 'scale': scale, 'steps': steps, 'img_mode': img_mode,
+		'prompt': prompt, 'negative_prompt': uc, 'dynamic_thresholding': self.decrisp_button.enabled, 'negative_prompt_strength': self.uccs_input.text,
+		'dynamic_thresholding_mimic_scale': self.decrisp_scale_input.text if self.decrisp_button.enabled else 10,
+		'dynamic_thresholding_percentile': self.decrisp_percentile_input.text if self.decrisp_button.enabled else 0.999,}
 
 		if self.mode_switcher.cc_active or self.mode_switcher.cs_active: # Cluster collage specific settings
 			seeds = [[self.cc_seed_grid.seed_inputs[j+i*int(self.cc_seed_grid.seed_cols_input.text)].text for j in range(int(self.cc_seed_grid.seed_cols_input.text))] for i in range(int(self.cc_seed_grid.seed_rows_input.text))]
@@ -1810,76 +900,23 @@ class ClusterVisionF(App):
 				return
 			IM_G.image_sequence(settings,self.config_window.eval_guard_button.enabled)
 		print(settings)
-		
-	# This function generates a single image like any other UI would do, just that it has to be aware of which fields are active and which to use
-	@handle_exceptions
-	def generate_single_image(self, instance):
-		if self.mode_switcher.cc_active:
-			if not self.cc_seed_grid.seed_inputs[0].text == '':
-				seed = self.cc_seed_grid.seed_inputs[0].text
-			else:
-				seed = str(IM_G.generate_seed())
-			if self.cc_sampler_input.text.__contains__(','):
-				sampler = self.cc_sampler_input.text.split(", ")[0]
-			else:
-				sampler = self.cc_sampler_input.text
-		else:
-			if not self.is_seed_input.text == '':
-				seed = self.is_seed_input.text
-			else:
-				seed = str(IM_G.generate_seed())
-			sampler = self.is_sampler_button.text
-			if self.is_sampler_dyn.enabled:
-				sampler+='_dyn'
-			elif self.is_sampler_smea.enabled:
-					sampler+='_smea'
-		settings = {'name': self.name_input.text,
-		'folder_name': self.folder_name_input.text,
-		'folder_name_extra': '',
-		'enumerator_plus': self.enumerator_plus_input.text,
-		'model': self.model_button.text,
-		'seed': int(seed),
-		'sampler': sampler,
-		'scale': float(TM.f_string_processor([['f"""'+self.scale_input_f.text+'"""']],self.config_window.eval_guard_button.enabled,{'n':0,'c':0,'r':0,'cc':0})) if self.scale_f.enabled else
-		float(self.scale_input_min.text),
-		'steps': int(TM.f_string_processor([['f"""'+self.steps_input_f.text+'"""']],self.config_window.eval_guard_button.enabled,{'n':0,'c':0,'r':0,'cc':0})) if self.steps_f.enabled else
-		int(self.steps_slider_min.value),
-		'img_mode': {'width': int(self.resolution_selector.resolution_width.text),
-								'height': int(self.resolution_selector.resolution_height.text)},
-		'prompt': TM.f_string_processor([['f"""' + self.prompt_f_input.prompt_inputs[i].text + '"""'] for i in range(self.prompt_f_input.prompt_rows)],self.config_window.eval_guard_button.enabled,{'n':0,'c':0,'r':0,'cc':0}) if self.prompt_f.enabled else
-		self.prompt_input.text,
-		'negative_prompt': TM.f_string_processor([['f"""' + self.uc_f_input.prompt_inputs[i].text + '"""'] for i in range(self.uc_f_input.prompt_rows)],self.config_window.eval_guard_button.enabled,{'n':0,'c':0,'r':0,'cc':0})if self.uc_f.enabled else
-		self.uc_input.text,
-		'dynamic_thresholding': self.decrisp_button.enabled,
-		'dynamic_thresholding_mimic_scale': float(TM.f_string_processor([['f"""'+self.decrisp_scale_input.text+'"""']],self.config_window.eval_guard_button.enabled,{'n':0,'c':0,'r':0,'cc':0})),
-		'dynamic_thresholding_percentile': float(TM.f_string_processor([['f"""'+self.decrisp_percentile_input.text+'"""']],self.config_window.eval_guard_button.enabled,{'n':0,'c':0,'r':0,'cc':0})),}
-		if self.check_settings(None, settings):
-			return
-		print(settings)
-		self.single_img_button.disabled = True
-		self.queue_button.disabled = True
-		self.process_button.disabled = True
-		self.wipe_queue_button.disabled = True
-		future = GS.EXECUTOR.submit(IM_G.generate_as_is,settings,'')
-		future.add_done_callback(self.on_process_complete)
 
 	# This function locks part of the UI and then processes the queued tasks one after the other in a separate thread
 	# No @handle_exceptions due to custom treatment of exceptions in the function
 	def on_process_button_press(self, instance):	
-		global PREVIEW_QUEUE
 		try:
 			self.switch_processing_state(True)
-			future = GS.EXECUTOR.submit(IM_G.process_queue,preview=PREVIEW_QUEUE)
+			future = GS.EXECUTOR.submit(IM_G.process_queue)
 			future.add_done_callback(self.on_process_complete)
 		except:
 			traceback.print_exc()
 			self.on_process_complete(None,immediate_preview=False)
-			PREVIEW_QUEUE= []
+			GS.PREVIEW_QUEUE= []
 			print('Task queue has been wiped due to an exception')
 
 	# Ends a processing run
 	@handle_exceptions
-	def on_process_complete(self, future, immediate_preview=True):
+	def on_process_complete(self, future, immediate_preview = True):
 		self.switch_processing_state(False)
 
 	# Locks/unlocks elements according to the current processing state
@@ -1891,11 +928,6 @@ class ClusterVisionF(App):
 		self.wipe_queue_button.disabled = processing
 		self.cancel_button.disabled = not processing
 		self.pause_button.disabled = not processing
-
-	# Cancel the current queue
-	#@handle_exceptions
-	#def cancel(self, processing):
-	#	IM_G.cancel_processing()
 
 if __name__ == '__main__':
 	ClusterVisionF().run()

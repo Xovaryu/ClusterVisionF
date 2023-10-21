@@ -1,7 +1,7 @@
 """
 config_handler.py
-This module is responsible for handling all configuration files
-It writes, loads (and in the future updates) configuration files
+	This module is responsible for handling all configuration files
+	It writes, loads (and in the future updates) configuration files
 """
 
 import os
@@ -108,23 +108,27 @@ NAI_PROMPT_CHUNKS=[
 ]
 
 #These are the names used to address certain models
-NAI_MODELS={'NAI Curated':'safe-diffusion','NAI Full':'nai-diffusion','NAI Furry':'nai-diffusion-furry'}
+NAI_MODELS={
+'NAI Anime Full V2':'nai-diffusion-2',
+'NAI Furry':'nai-diffusion-furry',
+'NAI Curated':'safe-diffusion',
+'NAI Anime Full V1':'nai-diffusion',}
 
 NAI_RESOLUTIONS={
+	'Small':{
+		'PortraitSmall': {'width':512, 'height':768},
+		'LandscapeSmall': {'width':768, 'height':512},
+		'SquareSmall':	 {'width':640, 'height':640,},
+	},
 	'Normal':{
-		'PortraitNormal': {'width':512, 'height':768},
-		'LandscapeNormal': {'width':768, 'height':512},
-		'SquareNormal':	 {'width':640, 'height':640,},
+		'PortraitNormal': {'width':832, 'height':1216},
+		'LandscapeNormal': {'width':1216,'height':832},
+		'SquareNormal': {'width':1024,'height':1024},
 	},
 	'Large':{
-		'PortraitLarge': {'width':832, 'height':1280},
-		'LandscapeLarge': {'width':1280,'height':832},
-		'SquareLarge': {'width':1024,'height':1024},
-	},
-	'Large+':{
-		'PortraitLarge+': {'width':1024, 'height':1536},
-		'LandscapeLarge+': {'width':1536,'height':1024},
-		'SquareLarge+': {'width':1472,'height':1472},
+		'PortraitLarge': {'width':1024, 'height':1536},
+		'LandscapeLarge': {'width':1536,'height':1024},
+		'SquareLarge': {'width':1472,'height':1472},
 	},
 	'Landscape':{
 		'LandscapeWallpaper': {'width':1920,'height':1088},
@@ -133,20 +137,24 @@ NAI_RESOLUTIONS={
 }""",
 	'3.Theme':
 """#Define your desired program colors here, the format is [R, G, B, A] with values from 0 to 1
-THEME=[
-	{'name': 'Input: Text', 'value': [1, 1, 1, 1]},
-	{'name': 'Input: Background', 'value': [0, 0, 0, 1]},
-	{'name': 'Program Text', 'value': [1, 0, 1, 1]},
-	{'name': 'Program Background', 'value': [0, 0, 0.3, 1]},
-	{'name': 'Console: Normal', 'value': [0, 1, 0, 1]},
-	{'name': 'Console: Error', 'value': [1, 0, 0, 1]},
-	{'name': 'Categories: Text', 'value': [1, 1, 1, 1]},
-	{'name': 'Categories: Background', 'value': [0.2, 0, 0.2, 1]},
-	{'name': 'Main Buttons: Text', 'value': [1, 1, 1, 1]},
-	{'name': 'Main Buttons: Background', 'value': [0.6, 0.6, 0.6, 1]},
-	{'name': 'Dropdown Buttons: Text', 'value': [1, 1, 1, 1]},
-	{'name': 'Dropdown Buttons: Background', 'value': [0, 0.6, 0.6, 1]},
-]""",
+THEME = {
+    'InText': {'Name': 'Input: Text', 'value': [1, 1, 1, 1]},
+    'InBg': {'Name': 'Input: Background', 'value': [0, 0, 0, 1]},
+    'ProgText': {'Name': 'Program Text', 'value': [1, 0, 1, 1]},
+    'ProgBg': {'Name': 'Program Background', 'value': [0, 0, 0.3, 1]},
+	
+    'ConNorm': {'Name': 'Console: Normal', 'value': [0, 1, 0, 1]},
+	'ConWarn': {'Name': 'Console: Warning', 'value': [1, 1, 0, 1]},
+    'ConErr': {'Name': 'Console: Error', 'value': [1, 0, 0, 1]},
+    'CatText': {'Name': 'Categories: Text', 'value': [1, 1, 1, 1]},
+    'CatBg': {'Name': 'Categories: Background', 'value': [0.2, 0, 0.2, 1]},
+	
+    'MBtnText': {'Name': 'Main Buttons: Text', 'value': [1, 1, 1, 1]},
+    'MBtnBg': {'Name': 'Main Buttons: Background', 'value': [0.6, 0.6, 0.6, 1]},
+    'DBtnText': {'Name': 'Dropdown Buttons: Text', 'value': [1, 1, 1, 1]},
+    'DBtnBg': {'Name': 'Dropdown Buttons: Background', 'value': [0, 0.6, 0.6, 1]},
+}
+""",
 	'4.Token(DO NOT SHARE)':
 """#Only the access token goes into this file. Do not share it with anyone else as that's against NAI ToS. Using it on multiple of your own devices is fine.
 AUTH=''

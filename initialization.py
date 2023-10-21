@@ -1,18 +1,18 @@
 """
 initialization.py
-This module handles all the needed initialization at the start
+	This module handles all the needed initialization at the start
 
-1. GlobalState
-	GlobalState is a class that's responsible for organizing all the information that's shared back and forth between all modules
-	GlobalState is a singleton using an adjusted __new__ instead of __init__
-2. handle_exceptions
-	This is a decorator function used to wrap just about any and every function outside of the Kivy main thread, no matter what it is
-	Its purpose is to prevent any and all silent crashes, make the program maximally robust and report all errors both in the console as well as the app
-	Functions that get this wrapper do not halt the program and use traceback to report issues visibly both in the attached terminal and the console in the app
-	The wrapper also saves the last error message to GS.LAST_ERROR, making it available for quick copying in the UI
-3. load_fonts
-	This function is responsible for loading in all the default and possibly user defined prompts
-	Because of the importance of these fonts, the program can't properly start without these
+01.	GlobalState
+			GlobalState is a class that's responsible for organizing all the information that's shared back and forth between all modules
+			GlobalState is a singleton using an adjusted __new__ instead of __init__
+02.	handle_exceptions
+			This is a decorator function used to wrap just about any and every function outside of the Kivy main thread, no matter what it is
+			Its purpose is to prevent any and all silent crashes, make the program maximally robust and report all errors both in the console as well as the app
+			Functions that get this wrapper do not halt the program and use traceback to report issues visibly both in the attached terminal and the console in the app
+			The wrapper also saves the last error message to GS.LAST_ERROR, making it available for quick copying in the UI
+03.	load_fonts
+			This function is responsible for loading in all the default and possibly user defined prompts
+			Because of the importance of these fonts, the program can't properly start without these
 """
 from fontTools.ttLib import TTFont
 from concurrent.futures import ThreadPoolExecutor
@@ -23,6 +23,7 @@ import traceback
 import functools
 import time
 from PIL import ImageFont
+from kivy.event import EventDispatcher
 
 # Fetch the current running dir
 if getattr(sys, 'frozen', False):
@@ -33,7 +34,7 @@ else:
     full_dir = os.path.dirname(os.path.realpath(__file__)) + '/'
 
 # 1. The big singleton class to be employed whenever any global state or variable is needed
-class GlobalState:
+class GlobalState(EventDispatcher):
 	_instance = None
 	def __new__(cls):
 		if cls._instance is None:
@@ -57,6 +58,9 @@ class GlobalState:
 			cls._instance.GENERATE_IMAGES = True
 			cls._instance.LAST_ERROR = None
 			cls._instance.LAST_TASK_REPORT = time.time()
+			cls._instance.LAST_SEED = ''
+			cls._instance.PRE_LAST_SEED = ''
+			cls._instance.PREVIEW_QUEUE = []
 		return cls._instance
 GS = GlobalState()
 

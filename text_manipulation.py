@@ -1,33 +1,33 @@
 """
 text_manipulation.py
-This module contains functions and classes strictly related to text manipulation
+	This module contains functions and classes strictly related to text manipulation
 
-1. replace_forbidden_symbols
-	Because operating systems forbid the use of certain symbols in file and folder names this function is added to replace those when needed
-2. find_evaluated_fstring_braces
-	Because evaluated f-strings should have a different color on the cluster collage for proper readability
-	This function is used to make this possible by analyzing the sting and returning all the start/end indexes of the f-string braces
-3. unpack_list
-	This function is just needed to make the multiple combined prompt fields usable
-4. fallback_font_writer
-	Highly complex function to achieve a flexible "Everything Font".
-	Is used for writing the text on cluster collages to make sure that no matter what symbol combination a user might need, it can be done
-5. f_string_pre_processor
-	Takes the text from the frontend and adjusts it so that it's actually a valid f-string
-	Called from within f_string_processor
-6. f_string_processor
-	Takes the passed list of f-strings and evaluates them, depending on settings in restricted or unrestricted mode
-	Used in various places all throughout the code to handle the various f-string user inputs
-7. make_file_path
-	!: Should probably be deprecated and removed completely
-8. escape_quotes_for_saving
-	This simple function does what the title says, it escapes all quotes so that they can be saved and loaded from files properly
-9. save_settings
-	Takes a settings dict and then saves it as a neatly formatted .py file that can be re-imported later
-	!: Likely needs filepath adjustments
-10. FilePathHandler
-	This class handles the various requirements of generating/evaluating filepaths correctly during task processing
-	Initialized per task and called whenever a filepath needs to be generated right when a file needs to be written
+01.	replace_forbidden_symbols
+			Because operating systems forbid the use of certain symbols in file and folder names this function is added to replace those when needed
+02.	find_evaluated_fstring_braces
+			Because evaluated f-strings should have a different color on the cluster collage for proper readability
+			This function is used to make this possible by analyzing the sting and returning all the start/end indexes of the f-string braces
+03.	unpack_list
+			This function is just needed to make the multiple combined prompt fields usable
+04.	fallback_font_writer
+			Highly complex function to achieve a flexible "Everything Font".
+			Is used for writing the text on cluster collages to make sure that no matter what symbol combination a user might need, it can be done
+05.	f_string_pre_processor
+			Takes the text from the frontend and adjusts it so that it's actually a valid f-string
+			Called from within f_string_processor
+06.	f_string_processor
+			Takes the passed list of f-strings and evaluates them, depending on settings in restricted or unrestricted mode
+			Used in various places all throughout the code to handle the various f-string user inputs
+07.	make_file_path
+			!: Should probably be deprecated and removed completely
+08.	escape_quotes_for_saving
+			This simple function does what the title says, it escapes all quotes so that they can be saved and loaded from files properly
+09.	save_settings
+			Takes a settings dict and then saves it as a neatly formatted .py file that can be re-imported later
+			!: Likely needs filepath adjustments
+10.	FilePathHandler
+			This class handles the various requirements of generating/evaluating filepaths correctly during task processing
+			Initialized per task and called whenever a filepath needs to be generated right when a file needs to be written
 """
 from initialization import handle_exceptions, GlobalState
 GS = GlobalState()
