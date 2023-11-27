@@ -5,7 +5,7 @@
 - The following packages (installable via PIP): requests, pillow, numpy, imageio, imageio[pyav], fontTools, kivy, transformers  
 
 ## Usage
-Currently this UI also needs an active NovelAI subscription, so keep that in mind (there is a hint about NAI's Tos at the end of this README).  
+Currently this UI also needs an active NovelAI subscription, so keep that in mind (there is a hint about NAI's ToS at the end of this README).  
 A full local Stable Diffusion integration is planned, and other APIs may be added as well.
 You can either subscribe to my Patreon page (5$) to get a .zip with a single executable file (plus the necessary fonts folder) or run this repo manually. Both versions are functionally the same.
 If you opt to run this repo yourself, set up python and the dependencies as mentioned above. I strongly recommend Python 3.10. Other version may or may not work.
