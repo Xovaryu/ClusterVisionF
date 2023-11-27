@@ -1,10 +1,13 @@
 # ClusterVisionF
 
 ## Prerequisites
-- Image sequences, standard videos made from the former, and cluster collages require a functional Python 3 installation and the following packages easily installable via PIP: requests, pillow, numpy, imageio, imageio[pyav], fontTools, kivy, transformers
+- Python 3.10 (other versions may or may not work)  
+- The following packages (installable via PIP): requests, pillow, numpy, imageio, imageio[pyav], fontTools, kivy, transformers  
 
 ## Usage
-You can either subscribe to my Patreon page (5$) to get a .zip with a single executable file (plus the necessary fonts folder) or run this repo manually. Both versions are functionally the same. Currently this UI also needs an active NovelAI subscription. A full local Stable Diffusion integration is planned, and other APIs may be added as well.
+Currently this UI also needs an active NovelAI subscription, so keep that in mind (there is a hint about NAI's Tos at the end of this README).  
+A full local Stable Diffusion integration is planned, and other APIs may be added as well.
+You can either subscribe to my Patreon page (5$) to get a .zip with a single executable file (plus the necessary fonts folder) or run this repo manually. Both versions are functionally the same.
 If you opt to run this repo yourself, set up python and the dependencies as mentioned above. I strongly recommend Python 3.10. Other version may or may not work.
 Clone/download the files from this repository to your preferred folder.
 Once you have the folder set up with the files, run main.py, and set your token in the settings window (small gear icon in the upper left corner). To do that, fetch your authorization string from the NovelAI website (example process in Firefox would be "F12 → Storage → Local Storage → https://novelai.net → session → right-click on the field on the right and copy"), then put the entire string into the field and click "Set Token".
@@ -23,37 +26,21 @@ This tool is and will remain completely free to use, but if you could spare a bi
 I also have a discord server where I organize all my AI image generation endeavors including using this and other tools to try and gain a deeper understanding for certain characteristics of NAID, where we can share our results and so on: https://discord.gg/xJTwDVBa5b
 
 ## Change Log
-### Version 5
+### Version 5.1
 #### Additions/Features
--Seed fields can now be randomized/cleared individually by pressing `r`/`c` in the desired field  
--Seed fields can now also be filled with the last two seeds that were used to generate images, using `l` for the last seed and `p` for the previous one  
--Introduced a new variable `s` for cluster collages, which is an index of all the provided seeds  
--All fields that support f-strings now allow placing the special f-string braces around the cursor when pressing CTRL+SHIFT+F  
--ScrollInput fields now can adjust any contained selected number even if there's text, and will automatically search the first number if needed  
--NAI Diffusion Anime V2 is now selectable as a model  
--NovelAI's Undesired Content Strength is now available in the UI  
+-Support for V3 (delete 2.NAID_Constants.py before running the new version)  
 
 #### Changes
--WARNING: NovelAI has released a new model and changed the naming of resolutions, so delete "2.NAID_Constants.py"  
--WARNING: Themes have gotten a slightly overhauled format, the old "3.Theme.py" file is hence outdated, rewrite or simply delete it  
--The default resolution is now 1024x1024 in line with the newest bigger free resolution  
--NovelAI has made permanent API tokens available under User Settings→Account→Get Persistent API Token, they can be inserted in the UI as before  
--The console now also supports color coded warnings  
--More refactoring, moved the kivy widgets into their own file and created the according manifest  
--The scale/steps fields are now using their f-string version by default  
--Streamlined StateFButton and its use, as well as PREVIEW_QUEUE (which is probably to be nuked some other update)  
--Stripped away a number of functions in image_generator.py in favor of in-place lambda bindings  
--Deprecated and removed the debriefing function  
+-Upgraded Name and Folder Name fields to ScrollInputs  
+-The collage dimension fields are now labeled for better immediate understanding  
+-Lambda functions have now also been aggressively wrapped with exception handling to fight silent crashes further  
+-The ucPreset variable hasn't been used and the API doesn't demand it so it has been removed  
+-process_queue has been streamlined just a bit  
+-Failure to set a model now has CVF default to V3  
 
 #### Bug Fixes
--Failure to copy strings with certain symbols (This was a Kivy fault, has been reported by me and has a fix pending made by someone else)  
--There was another oversight leading to a memory leak when making cluster sequences but not videos  
--Video processing is now cancelled gracefully  
--The persisting image generation loop now works properly and can be cancelled properly  
--If a setting can't be imported from a previous image it was left as it is, which can cause problems in some cases, so far 2 needed fallbacks were added  
--Made it so that if the decrisper/dynamic thresholding is disabled, the according variables are set to None, which shouldn't be necessary, but was in a fringe case  
--Added traceback to the image loop since it would only report that it's retrying, but not the error that caused it, which is okay for connection issues, but not when I messed up  
--Image sequences actually didn't even appropriately try to evaluate f-strings for the decrisper, fixed  
+-The negative prompt strength field should now work as intended  
+-I smartly left in temporary test settings for video generation, so the frame rate was always set to 10, ignoring user input, fixed that...  
 
 ### Known Issues
 -The negative prompt strength field does currently not work for cluster collages and f-strings  
@@ -62,3 +49,8 @@ I also have a discord server where I organize all my AI image generation endeavo
 -Windows currently always starts CVF at native resolution and ignores the resolution set in build(), which is almost certainly a Kivy issue  
 -Backspaces in evaluated parts of prompts do not work properly, this is an issue with Python that will be fixed in 3.12, until then a BS constant is available  
 -The spacing in the config Window is all mucked up  
+-There's a semi-random failure affecting video generation at times  
+
+## NovelAI's Terms of Service
+This UI is compliant with NAI's ToS (https://novelai.net/terms), and the devs are well aware of this UI.  
+But you may want to be aware of 9.1.6 in their terms specifically, which disallows using automated systems to put excessive strain on their services. Just as using an autoclicker on their web UI may get you limited and banned so might using CVF as a glorified autoclicker get you banned. As a general rule of thumb, do not generate more than one picture at once for more than a sparse parallel images, do not generate all day... you know, the obvious, don't take the free Opus generations and go on a rampage. CVF's purpose is to generate insightful high quality data and to make your generations count, not to dig for raw quantity.
