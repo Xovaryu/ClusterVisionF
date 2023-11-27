@@ -246,7 +246,7 @@ class ClusterVisionF(App):
 			else:
 				self.uc_f.enabled = False
 				self.try_to_load('negative_prompt', self.uc_input, settings, uc_label, True, 'text')
-		self.try_to_load('negative_prompt_strength', self.uccs_input, settings, 'negative_prompt_strength', self.uccs_import.enabled, 'text', 100)
+		self.try_to_load('negative_prompt_strength', self.ucs_input, settings, 'negative_prompt_strength', self.ucs_import.enabled, 'text', 100)
 		if settings.get('collage_dimensions'):
 			self.try_to_load('collage_dimensions', self.cc_dim_width, settings, ['collage_dimensions', 0], self.cc_dim_import.enabled, 'text')
 			self.try_to_load('collage_dimensions', self.cc_dim_height, settings, ['collage_dimensions', 1], self.cc_dim_import.enabled, 'text')
@@ -319,9 +319,11 @@ class ClusterVisionF(App):
 					self.model_button.text = 'safe-diffusion'
 				elif metadata["info"]["Source"] == 'Stable Diffusion F1022D28': # Anime Full V2
 					self.model_button.text = 'nai-diffusion-2'
+				elif metadata["info"]["Source"] == 'Stable Diffusion XL C1E1DE52': # Anime Full V3
+					self.model_button.text = 'nai-diffusion-3'
 				elif metadata["info"]["Source"] == 'Stable Diffusion': # This should normally not be encountered but some images in the past were generated like this due to a bug on NAI's side
-					print(f"[Warning] The loaded picture doesn't have the model specified. Defaulting to NAID Full, but be aware the original model for this picture might have been different")
-					self.model_button.text = 'nai-diffusion'
+					print(f"[Warning] The loaded picture doesn't have the model specified. Defaulting to NAID Full V3, but be aware the original model for this picture might have been different")
+					self.model_button.text = 'nai-diffusion-3'
 				else:
 					print(f'[Warning] Error while determining model, defaulting to Full')
 					self.model_button.text = 'nai-diffusion'
@@ -373,7 +375,8 @@ class ClusterVisionF(App):
 				self.uc_input.text = comment_dict["uc"]
 			else:
 				self.try_to_load('negative_prompt', self.uc_input, comment_dict,'negative_prompt', True, 'text')
-		self.try_to_load('negative_prompt_strength', self.uccs_input, comment_dict, 'uncond_scale', self.uccs_import.enabled, 'text', 100)
+		if self.try_to_load('negative_prompt_strength', self.ucs_input, comment_dict, 'uncond_scale', self.ucs_import.enabled, 'text', 100):
+			self.ucs_input.text = str(float(self.ucs_input.text)*100)
 		print(f'Loading from picture successful')
 
 	# Functions needed for the steps slider
@@ -410,12 +413,12 @@ class ClusterVisionF(App):
 		# Name
 		name_label = Label(text='Name:', **l_row_size1, **label_color)
 		self.name_import = KW.ImportButton(**imp_row_size1)
-		self.name_input = TextInput(multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors)
+		self.name_input = KW.ScrollInput(fi_mode=None, increment=1, multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors)
 
 		# Folder Name
 		folder_name_label = Label(text='Folder Name:', **l_row_size1, **label_color)
 		self.folder_name_import = KW.ImportButton(**imp_row_size1)
-		self.folder_name_input = TextInput(multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors)
+		self.folder_name_input = KW.ScrollInput(fi_mode=None, increment=1, multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors)
 
 		# Model
 		self.model_label = Label(text='Model:', **l_row_size1, **label_color)
@@ -427,9 +430,9 @@ class ClusterVisionF(App):
 
 		for model_name in MODELS.values():
 			btn = Button(text=model_name, size_hint_y=None, height=field_height, **dp_button_colors)
-			btn.bind(on_release=lambda btn: self.model_dropdown.select(btn.text))
+			btn.bind(on_release=handle_exceptions(lambda btn: self.model_dropdown.select(btn.text)))
 			self.model_dropdown.add_widget(btn)
-		self.model_dropdown.bind(on_select=lambda instance, x: setattr(self.model_button, 'text', x))
+		self.model_dropdown.bind(on_select=handle_exceptions(lambda instance, x: setattr(self.model_button, 'text', x)))
 
 		# Seed - Cluster Collage
 		cc_seed_label = Label(text='Seed:', **l_row_size2, **label_color)
@@ -442,8 +445,8 @@ class ClusterVisionF(App):
 		is_seed_randomize = Button(text='Randomize', size_hint=(None, None), size=(100, field_height), **button_colors)
 		is_seed_clear = Button(text='Clear', size_hint=(None, None), size=(60, field_height), **button_colors)
 		self.is_seed_input = KW.SeedScrollInput(min_value=0, max_value=4294967295, increment=1000, text='', multiline=False, size_hint=(1, None), size=(100, field_height), allow_empty=True, **input_colors)
-		is_seed_randomize.bind(on_release=lambda btn: setattr(self.is_seed_input, 'text', str(IM_G.generate_seed())))
-		is_seed_clear.bind(on_release=lambda btn: setattr(self.is_seed_input, 'text', ''))
+		is_seed_randomize.bind(on_release=handle_exceptions(lambda btn: setattr(self.is_seed_input, 'text', str(IM_G.generate_seed()))))
+		is_seed_clear.bind(on_release=handle_exceptions(lambda btn: setattr(self.is_seed_input, 'text', '')))
 		is_seed_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, field_height))
 		is_seed_layout.add_widget(is_seed_randomize)
 		is_seed_layout.add_widget(is_seed_clear)
@@ -494,7 +497,7 @@ class ClusterVisionF(App):
 		self.cc_sampler_import = KW.ImportButton(size_hint = (None, None), size = (field_height, field_height*2))
 		self.cc_sampler_input = TextInput(multiline=True, size_hint=(1, 1), height=field_height*2, **input_colors)
 		cc_clear_button = Button(text='Clear', size_hint=(None, 1), size=(60, field_height*2), **button_colors)
-		cc_clear_button.bind(on_release=lambda button: setattr(self.cc_sampler_input, 'text', ''))
+		cc_clear_button.bind(on_release=handle_exceptions(lambda button: setattr(self.cc_sampler_input, 'text', '')))
 		cc_sampler_button = Button(text='Add Sampler', size_hint=(None, 1), size=(150, field_height*2), **button_colors)
 
 		cc_sampler_injector = KW.ConditionalInjectorDropdown(size_hint=(None, 1), width=field_height, dropdown_list=GS.NAI_SAMPLERS, button_text='+', target=self.cc_sampler_input, inject_identifier='S')
@@ -513,16 +516,16 @@ class ClusterVisionF(App):
 		self.is_sampler_button.bind(on_release=is_sampler_dropdown.open)
 		for sampler_name in GS.NAI_SAMPLERS_RAW:
 			btn = Button(text=sampler_name, size_hint_y=None, height=field_height, **dp_button_colors)
-			btn.bind(on_release=lambda btn: is_sampler_dropdown.select(btn.text))
+			btn.bind(on_release=handle_exceptions(lambda btn: is_sampler_dropdown.select(btn.text)))
 			is_sampler_dropdown.add_widget(btn)
-		is_sampler_dropdown.bind(on_select=lambda instance, x: setattr(self.is_sampler_button, 'text', x))
+		is_sampler_dropdown.bind(on_select=handle_exceptions(lambda instance, x: setattr(self.is_sampler_button, 'text', x)))
 		
 		is_sampler_layout = BoxLayout(orientation='horizontal',size_hint=(1, None), height=field_height)
 		self.is_sampler_smea = KW.StateShiftButton(text='SMEA', size_hint=(None, 1), size=(80,field_height))
 		self.is_sampler_dyn = KW.StateShiftButton(text='Dyn', size_hint=(None, 1), size=(80,field_height))
 
-		self.is_sampler_smea.bind(enabled=lambda instance, value: KW.on_smea_disabled(value, self.is_sampler_dyn))
-		self.is_sampler_dyn.bind(enabled=lambda instance, value: KW.on_dyn_enabled(value, self.is_sampler_smea))
+		self.is_sampler_smea.bind(enabled=handle_exceptions(lambda instance, value: KW.on_smea_disabled(value, self.is_sampler_dyn)))
+		self.is_sampler_dyn.bind(enabled=handle_exceptions(lambda instance, value: KW.on_dyn_enabled(value, self.is_sampler_smea)))
 		is_sampler_layout.add_widget(self.is_sampler_button)
 		is_sampler_layout.add_widget(self.is_sampler_smea)
 		is_sampler_layout.add_widget(self.is_sampler_dyn)
@@ -594,28 +597,30 @@ class ClusterVisionF(App):
 		uc_buttons_layout.add_widget(self.uc_f)
 
 		# UC Content Strength
-		uccs_label = Label(text='NP Strength:', **l_row_size1, **label_color)
-		self.uccs_import = KW.ImportButton(**imp_row_size1)
-		uccs_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=field_height)
+		ucs_label = Label(text='NP Strength:', **l_row_size1, **label_color)
+		self.ucs_import = KW.ImportButton(**imp_row_size1)
+		ucs_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=field_height)
 
-		uccs_slider = Slider(min=0, max=500, value=100, size_hint=(1, None), height=field_height)
-		self.uccs_input = KW.FScrollInput(min_value=0, max_value=1000, fi_mode=float, text='100', size_hint=(None, None), width=200, height=field_height, **input_colors)
-		uccs_percent_label = Label(text='%', size_hint=(None, None), width=40, height=field_height, **label_color)
+		ucs_slider = Slider(min=0, max=500, value=100, size_hint=(1, None), height=field_height)
+		self.ucs_input = KW.FScrollInput(min_value=0, max_value=1000, fi_mode=None, text='100', size_hint=(None, None), width=200, height=field_height, **input_colors, font_name='Unifont')
+		ucs_percent_label = Label(text='%', size_hint=(None, None), width=40, height=field_height, **label_color)
+		ucs_slider.bind(value=handle_exceptions(lambda instance, value: setattr(self.ucs_input, 'text', str(value))))
 
-		uccs_slider.bind(value=handle_exceptions(lambda instance, value: setattr(self.uccs_input, 'text', str(value))))
-		self.uccs_input.bind(text=handle_exceptions(lambda instance, value: setattr(uccs_slider, 'value', float(value) if value else 0)))
-
-		uccs_layout.add_widget(uccs_slider)
-		uccs_layout.add_widget(self.uccs_input)
-		uccs_layout.add_widget(uccs_percent_label)
+		ucs_layout.add_widget(ucs_slider)
+		ucs_layout.add_widget(self.ucs_input)
+		ucs_layout.add_widget(ucs_percent_label)
 
 		# Collage Dimensions
 		cc_dim_label = Label(text='Collage Dim.:', **l_row_size1, **label_color)
 		self.cc_dim_import = KW.ImportButton(**imp_row_size1)
 		cc_dim_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=field_height)
+		cc_dim_width_label = Label(text='Columns:', size_hint=(None, None), width=80, height=field_height, **label_color)
 		self.cc_dim_width = KW.ScrollInput(text='3', size_hint=(1, None), width=60, height=field_height, **input_colors)
+		cc_dim_height_label = Label(text='Rows:', size_hint=(None, None), width=80, height=field_height, **label_color)
 		self.cc_dim_height = KW.ScrollInput(text='3', size_hint=(1, None), width=60, height=field_height, **input_colors)
+		cc_dim_layout.add_widget(cc_dim_width_label)
 		cc_dim_layout.add_widget(self.cc_dim_width)
+		cc_dim_layout.add_widget(cc_dim_height_label)
 		cc_dim_layout.add_widget(self.cc_dim_height)
 
 		# Image Sequence Quantity
@@ -703,9 +708,9 @@ class ClusterVisionF(App):
 		input_layout.add_widget(uc_buttons_layout)
 		input_layout.add_widget(uc_layout)
 
-		input_layout.add_widget(uccs_label)
-		input_layout.add_widget(self.uccs_import)
-		input_layout.add_widget(uccs_layout)
+		input_layout.add_widget(ucs_label)
+		input_layout.add_widget(self.ucs_import)
+		input_layout.add_widget(ucs_layout)
 
 		input_layout.add_widget(cc_dim_label)
 		input_layout.add_widget(self.cc_dim_import)
@@ -722,13 +727,13 @@ class ClusterVisionF(App):
 		# In the middle is the meta_layout with the console and a some more relevant buttons
 		task_state_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=field_height)
 		self.cancel_button = Button(text='⬛', font_name='Unifont',size_hint=(None, None), size=(field_height,field_height), **button_colors)
-		self.cancel_button.bind(on_release=lambda instance: setattr(GS, 'PAUSE_REQUEST', False))
-		self.cancel_button.bind(on_release=lambda instance: setattr(GS, 'CANCEL_REQUEST', True))
+		self.cancel_button.bind(on_release=handle_exceptions(lambda instance: setattr(GS, 'PAUSE_REQUEST', False)))
+		self.cancel_button.bind(on_release=handle_exceptions(lambda instance: setattr(GS, 'CANCEL_REQUEST', True)))
 
 		self.pause_button = KW.PauseButton(**imp_row_size1)
-		self.pause_button.bind(on_release=lambda instance: setattr(GS, 'PAUSE_REQUEST', not GS.PAUSE_REQUEST))
+		self.pause_button.bind(on_release=handle_exceptions(lambda instance: setattr(GS, 'PAUSE_REQUEST', not GS.PAUSE_REQUEST)))
 		overwrite_button = KW.StateShiftButton(text='Overwrite Images', size_hint=(1, None), size=(70,field_height), font_size=font_small)
-		overwrite_button.bind(on_release=lambda instance: setattr(GS, 'OVERWRITE_IMAGES', not GS.OVERWRITE_IMAGES))
+		overwrite_button.bind(on_release=handle_exceptions(lambda instance: setattr(GS, 'OVERWRITE_IMAGES', not GS.OVERWRITE_IMAGES)))
 		self.wipe_queue_button = Button(text='Wipe Queue', size_hint=(1, None), size=(60,field_height), **button_colors)
 		self.wipe_queue_button.bind(on_release=IM_G.wipe_queue)
 		task_state_layout.add_widget(self.pause_button)
@@ -824,7 +829,7 @@ class ClusterVisionF(App):
 		self.prompt_input.text,
 		'negative_prompt': TM.f_string_processor([['f"""' + self.uc_f_input.prompt_inputs[i].text + '"""'] for i in range(self.uc_f_input.prompt_rows)],self.config_window.eval_guard_button.enabled,blank_eval_dict)if self.uc_f.enabled else
 		self.uc_input.text,
-		'negative_prompt_strength': self.uccs_input.text,
+		'negative_prompt_strength': self.ucs_input.text,
 		'dynamic_thresholding': self.decrisp_button.enabled,
 		'dynamic_thresholding_mimic_scale': float(TM.f_string_processor([['f"""'+self.decrisp_scale_input.text+'"""']],self.config_window.eval_guard_button.enabled,blank_eval_dict)) if self.decrisp_button.enabled else 10,
 		'dynamic_thresholding_percentile': float(TM.f_string_processor([['f"""'+self.decrisp_percentile_input.text+'"""']],self.config_window.eval_guard_button.enabled,blank_eval_dict)) if self.decrisp_button.enabled else 0.999,}
@@ -832,7 +837,7 @@ class ClusterVisionF(App):
 			return
 		print(settings)
 		self.single_img_button.disabled = True
-		self.queue_button.disabled = True
+		#self.queue_button.disabled = True
 		self.process_button.disabled = True
 		self.cancel_button.disabled = False
 		self.wipe_queue_button.disabled = True
@@ -869,7 +874,7 @@ class ClusterVisionF(App):
 		else:
 			uc = self.uc_input.text
 		settings = {'name': name, 'folder_name': folder_name, 'model': model, 'scale': scale, 'steps': steps, 'img_mode': img_mode,
-		'prompt': prompt, 'negative_prompt': uc, 'dynamic_thresholding': self.decrisp_button.enabled, 'negative_prompt_strength': self.uccs_input.text,
+		'prompt': prompt, 'negative_prompt': uc, 'dynamic_thresholding': self.decrisp_button.enabled, 'negative_prompt_strength': self.ucs_input.text,
 		'dynamic_thresholding_mimic_scale': self.decrisp_scale_input.text if self.decrisp_button.enabled else 10,
 		'dynamic_thresholding_percentile': self.decrisp_percentile_input.text if self.decrisp_button.enabled else 0.999,}
 
@@ -923,7 +928,7 @@ class ClusterVisionF(App):
 	@handle_exceptions
 	def switch_processing_state(self, processing):
 		self.single_img_button.disabled = processing
-		self.queue_button.disabled = processing
+		#self.queue_button.disabled = processing
 		self.process_button.disabled = processing 
 		self.wipe_queue_button.disabled = processing
 		self.cancel_button.disabled = not processing

@@ -106,7 +106,6 @@ def form_prompt(settings,number=1,noise=0.1,strength=0.4):
 			'dynamic_thresholding_mimic_scale': settings["dynamic_thresholding_mimic_scale"],
 			'dynamic_thresholding_percentile': settings["dynamic_thresholding_percentile"],
 			'quality toggle': False,
-			'ucPreset': 0,
 			'uncond_scale': float(settings["negative_prompt_strength"])/100
 			}
 		}
@@ -128,7 +127,6 @@ def image_gen(auth,prompt,filepath,enumerator,token_test=False):
 		if not GS.OVERWRITE_IMAGES and not token_test:
 			if os.path.isfile(filepath):
 				skipped = True
-				#print("File already present, skipped generation")
 				break
 		if token_test:
 			resp=requests.post(GS.URL,json.dumps(prompt[0]),headers={'Authorization': api_header,'Content-Type': 'application/json','accept': 'application/json',})
@@ -266,7 +264,7 @@ def make_vid(vid_params, vid_path, img_futures, num_frames, base_path='__0utput_
 	
 	# Initialize video writer
 	writer = imageio.get_writer(full_vid_folder_path+extension, **vid_params)
-	
+	print(vid_params['fps'])
 	# Determine frame size from the first completed image future
 	first_img_future_or_str = img_futures.get()
 	expecting_strs = False # IS will return paths while CS will return the cluster collages directly, so we need to check for what we're working with
@@ -377,6 +375,8 @@ def attach_metadata_header(img_collages,settings,name_extra, cc=''):
 		model = 'NovelAI Diffusion Full V1.0.1'
 	elif settings["model"] == 'nai-diffusion-2':
 		model = 'NovelAI Diffusion Full V2'
+	elif settings["model"] == 'nai-diffusion-3':
+		model = 'NovelAI Diffusion Full V3'
 	elif settings["model"] == 'nai-diffusion-furry':
 		model = 'NovelAI Diffusion Furry V1.3'
 	else:
@@ -408,6 +408,7 @@ def attach_metadata_header(img_collages,settings,name_extra, cc=''):
 		line_height*currently_used_lines, left_meta_block, available_lines, line_height, (255,255,255,0), break_symbol = ',')
 	currently_used_lines=currently_used_lines+used_lines_samplers
 	
+	# Decrisper
 	decrisper_string = 'Decrisper: '
 	if settings["dynamic_thresholding"] == False:
 		decrisper_string += 'Off'
@@ -417,6 +418,12 @@ def attach_metadata_header(img_collages,settings,name_extra, cc=''):
 	draw, img_header, used_lines_decrisper=TM.fallback_font_writer(draw, img_header, decrisper_string, 10,
 		line_height*currently_used_lines, left_meta_block, available_lines, line_height, (255,255,255,0), break_symbol = '|')
 	currently_used_lines=currently_used_lines+used_lines_decrisper
+	
+	# Undesired Content Strength
+	available_lines = available_lines - used_lines_decrisper
+	draw, img_header, used_lines_ucs=TM.fallback_font_writer(draw, img_header, 'Undesired Content Strength: '+settings["negative_prompt_strength"]+'%', 10,
+		line_height*currently_used_lines, left_meta_block, available_lines, line_height, (255,255,255,0), break_symbol = ',')
+	currently_used_lines=currently_used_lines+used_lines_ucs
 	
 	#Draw the prompt and UC on the right side
 	full_prompt=settings["prompt"]
@@ -654,7 +661,7 @@ def image_sequence_processor(settings):
 	
 	### To be replaced later
 	vid_params = {
-		'fps': 10,
+		'fps': settings["FPS"],
 		'codec': 'vp9',
 		'pixelformat': 'yuv444p',
 	}
@@ -740,7 +747,7 @@ def cluster_sequence(settings,eval_guard=True):
 def cluster_sequence_processor(settings):
 	### To be replaced later
 	vid_params = {
-		'fps': 10,
+		'fps': settings["FPS"],
 		'codec': 'vp9',
 		'pixelformat': 'yuv444p',
 	}
@@ -755,7 +762,7 @@ def cluster_sequence_processor(settings):
 	elif settings["video"] == 'interpolated':
 		vid = True
 		img_results = Queue()
-		GS.FUTURES.append(GS.EXECUTOR.submit(make_interpolated_vid, vid_params, settings["meta"]["vid_folder"], img_results, settings["quantity"], fps=settings["FPS"], factor=FF_FACTOR,output_mode=FF_OUTPUT_MODE))
+		GS.FUTURES.append(GS.EXECUTOR.submit(make_interpolated_vid, vid_params, settings["meta"]["vid_folder"], img_results, settings["quantity"], factor=FF_FACTOR,output_mode=FF_OUTPUT_MODE))
 	for cc in range(settings["quantity"]):
 		if vid:
 			img_results.put(cluster_collage_processor(settings, cc, 1+cc*settings["meta"]["imgs_per_collage"]))
@@ -793,7 +800,7 @@ def steps_scale_pre_processor(settings):
 # This function takes the passed variables and pre-processed steps/scale values and returns the desired value for the current image
 @handle_exceptions
 def steps_scale_processor(settings, img_settings, var_dict):
-	for key, func1, func2 in [("steps", int, int), ("scale", float, lambda x: round(x, 6))]:
+	for key, func1, func2 in [("steps", int, int), ("scale", float, handle_exceptions(lambda x: round(x, 6)))]:
 		value = settings[key]
 		img_settings[key] = (func2(func1(TM.f_string_processor([['f"""' + str(value) + '"""']], settings["meta"]["eval_guard"], var_dict))) if isinstance(value, str)
 			else (settings["meta"][key][0] if len(settings["meta"][key]) == 1 else func2(settings["meta"][key][var_dict['n']])))
@@ -809,7 +816,7 @@ def f_variables_processor(settings, img_settings, var_dict):
 
 # 12. This is the primary loop for iterating over the processing queue, which will either cancel and wipe if requested, skip if requested, or process the next task in the queue
 @handle_exceptions
-def process_queue(skip=0,end=False,preview=None):
+def process_queue():
 	GS.CANCEL_REQUEST = False
 	GS.PROCESSING_QUEUE_LEN = len(GS.PROCESSING_QUEUE)
 	for n in range(GS.PROCESSING_QUEUE_LEN):
@@ -818,16 +825,15 @@ def process_queue(skip=0,end=False,preview=None):
 			wipe_queue()
 			print('Task queue cancelled')
 			return
-		if skip > 0:
+		if GS.SKIP > 0:
 			GS.SKIPPED_TASKS += 1
 			print(f'Skipping task {GS.SKIPPED_TASKS}| There are {GS.PROCESSING_QUEUE_LEN} tasks left')
 			GS.SKIPPED_IMAGES += GS.PROCESSING_QUEUE.popleft()["meta"]["number_of_imgs"]
-			skip -= 1
+			GS.SKIP -= 1
 		else:
-			if end:
-				if GS.FINISHED_TASKS + GS.SKIPPED_TASKS == end:
-					print('Requested end of queue reached, finishing up')
-					return
+			if GS.END:
+				print('Requested end of queue reached, finishing up')
+				return
 			result = process_task(GS.PROCESSING_QUEUE.popleft())
 			if result == 'Error':
 				wipe_queue()

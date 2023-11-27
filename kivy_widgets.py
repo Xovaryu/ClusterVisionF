@@ -169,54 +169,6 @@ class ScrollInput(TextInput):
 				self.text = format(self.min_value, f'.{self.round_value}f').rstrip('0').rstrip('.')
 
 	@handle_exceptions
-	def on_touch_down2(self, touch):
-		# First we call the parent on_touch_down function so Kivy can do it's standard work like setting focus to the text field
-		super().on_touch_down(touch)
-		if not touch.is_mouse_scrolling or not self.collide_point(*touch.pos) or self.text == '' :
-			return
-		if not str(self.text).replace('.', '', 1).replace('-', '', 1).isdigit():
-			return
-		if touch.button in ('scrolldown', 'scrollup'):
-			if self.selection_text:
-				#...
-				target_value = self.selection_text
-				self.selection_text='FAFAAS'
-			
-			print (self.selection_text)
-			print (self.selection_from)
-			print (self.selection_to)
-		
-		
-		keyboard = Window.request_keyboard(None, self)
-		if 'alt' in Window._modifiers:
-			if 'shift' in Window._modifiers:
-				current_increment = self.increment / 1000
-			elif 'ctrl' in Window._modifiers:
-				current_increment = self.increment / 100
-			else:
-				current_increment = self.increment / 10
-		elif 'shift' in Window._modifiers:
-			if 'ctrl' in Window._modifiers:
-				current_increment = self.increment * 1000
-			else:
-				current_increment = self.increment * 100
-		elif 'ctrl' in Window._modifiers:
-			current_increment = self.increment * 10
-		else:
-			current_increment = self.increment
-		if self.fi_mode == int and current_increment < 1:
-			current_increment = 1
-		
-		
-		
-		if touch.button == 'scrolldown':
-			#self.text = format(min(self.fi_mode(self.text) + current_increment,self.max_value), f'.{self.round_value}f').rstrip('0').rstrip('.')
-			pass
-		elif touch.button == 'scrollup':
-			#self.text = format(max(self.fi_mode(self.text) - current_increment,self.min_value), f'.{self.round_value}f').rstrip('0').rstrip('.')
-			pass
-
-	@handle_exceptions
 	def calculate_increment(self):
 		keyboard = Window.request_keyboard(None, self)
 		if 'alt' in Window._modifiers:
@@ -271,17 +223,14 @@ class ScrollInput(TextInput):
 				except ValueError:
 					pass
 
-			else:
-				# No text selected, adjust the value
-
+			else: # No text selected, try the entire field
 				try:
 					value = self.fi_mode(self.text)
 					overwrite_text = True
 				except ValueError:
 					overwrite_text = False
 
-				if not overwrite_text:
-					# Check if the text contains a valid number using regex
+				if not overwrite_text: # Something in the field interferes, check if the text contains a valid number using regex
 					number_match = re.search(r'[-+]?\d*\.\d+|[-+]?\d+', self.text)
 					if number_match:
 						start, end = number_match.start(), number_match.end()
@@ -300,8 +249,7 @@ class ScrollInput(TextInput):
 							self.select_text(start, start + len(str(new_value)))
 						except ValueError:
 							pass
-
-				if overwrite_text:
+				else: #The field can be parsed, simply adjust it directly
 					increment = self.calculate_increment()
 					new_value = value + increment if touch.button == 'scrolldown' else value - increment
 					new_value = min(max(new_value, self.min_value), self.max_value)
@@ -419,7 +367,7 @@ class ImagePreview(AsyncImage):
 			self.texture = Texture.create(size=(image.size[0], image.size[1]), colorfmt='rgba')
 			flipped_image = image.transpose(PILImage.FLIP_TOP_BOTTOM)
 			self.texture.blit_buffer(flipped_image.tobytes(), colorfmt='rgba', bufferfmt='ubyte')
-			Clock.schedule_once(lambda dt: setattr(self, 'opacity', 1))
+			Clock.schedule_once(handle_exceptions(lambda dt: setattr(self, 'opacity', 1)))
 		except:
 			traceback.print_exc()
 
@@ -515,9 +463,9 @@ class InjectorDropdown(BoxLayout):
 		self.inject_identifier=inject_identifier
 		self.dropdown = DropDown(auto_width=False,size_hint=(1, None))
 		dropdown_button = Button(text=button_text, size_hint=(None, 1), width=field_height, height=field_height*2, **button_colors)
-		dropdown_button.bind(on_release=lambda *args: self.dropdown.open(dropdown_button))
+		dropdown_button.bind(on_release=handle_exceptions(lambda *args: self.dropdown.open(dropdown_button)))
 		# Update the dropdown button text when an item is selected
-		self.dropdown.bind(on_select=lambda instance, x: setattr(dropdown_button, 'text', x))
+		self.dropdown.bind(on_select=handle_exceptions(lambda instance, x: setattr(dropdown_button, 'text', x)))
 		self.add_widget(dropdown_button)
 
 		# Create a button for each item in the list
@@ -530,20 +478,20 @@ class InjectorDropdown(BoxLayout):
 		# Create a label for the name and string
 		item_label = BGLabel(text=f'[u]{item["name"]}[/u]\n{item_string}',markup=True,size_hint=(1, 1), **bg_label_colors)
 		item_label.bind(
-			width=lambda *args, item_label=item_label: item_label.setter('text_size')(item_label, (item_label.width, None)),
-			texture_size=lambda *args, item_label=item_label: item_label.setter('height')(item_label, item_label.texture_size[1])
+			width=handle_exceptions(lambda *args, item_label=item_label: item_label.setter('text_size')(item_label, (item_label.width, None))),
+			texture_size=handle_exceptions(lambda *args, item_label=item_label: item_label.setter('height')(item_label, item_label.texture_size[1]))
 		)
 		# Create a box layout for the item
 		item_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=field_height*2)
 		# Create a button to copy the string to the clipboard
 		copy_button = Button(text='Copy', font_size=font_large, size_hint=(None, None), width=50, height=field_height*2, **button_colors)
-		copy_button.bind(on_release=lambda *args, item_string=item_string, item_layout=item_layout: self.copy_to_clipboard(item_string, item_layout))
+		copy_button.bind(on_release=handle_exceptions(lambda *args, item_string=item_string, item_layout=item_layout: self.copy_to_clipboard(item_string, item_layout)))
 		# Create a button to prepend the string to the text box
 		prepend_button = Button(text='>' + self.inject_identifier, font_size=font_large, size_hint=(None, None), width=50, height=field_height*2, **button_colors)
-		prepend_button.bind(on_release=lambda *args, item_string=item_string, item_layout=item_layout: self.prepend_to_text_box(item_string, item_layout))
+		prepend_button.bind(on_release=handle_exceptions(lambda *args, item_string=item_string, item_layout=item_layout: self.prepend_to_text_box(item_string, item_layout)))
 		# Create a button to append the string to the text box
 		append_button = Button(text=self.inject_identifier + '<', font_size=font_large, size_hint=(None, None), width=50, height=field_height*2, **button_colors)
-		append_button.bind(on_release=lambda *args, item_string=item_string, item_layout=item_layout: self.append_to_text_box(item_string, item_layout))
+		append_button.bind(on_release=handle_exceptions(lambda *args, item_string=item_string, item_layout=item_layout: self.append_to_text_box(item_string, item_layout)))
 		item_layout.add_widget(copy_button)
 		item_layout.add_widget(prepend_button)
 		item_layout.add_widget(append_button)
@@ -575,8 +523,8 @@ class ConditionalInjectorDropdown(InjectorDropdown):
 			sampler_smea = StateShiftButton(text='SMEA', size_hint=(None, 1), size=(70,field_height))
 			sampler_dyn = StateShiftButton(text='Dyn', size_hint=(None, 1), size=(70,field_height))
 
-			sampler_smea.bind(enabled=lambda instance, value: on_smea_disabled(value, sampler_dyn))
-			sampler_dyn.bind(enabled=lambda instance, value: on_dyn_enabled(value, sampler_smea))
+			sampler_smea.bind(enabled=handle_exceptions(lambda instance, value: on_smea_disabled(value, sampler_dyn)))
+			sampler_dyn.bind(enabled=handle_exceptions(lambda instance, value: on_dyn_enabled(value, sampler_smea)))
 			item_layout.add_widget(sampler_smea, index=1)
 			item_layout.add_widget(sampler_dyn, index=1)
 
@@ -743,9 +691,9 @@ class SeedGrid(GridLayout):
 		self.seed_rows_input.bind(text=self.adjust_grid_size)
 
 		self.btn1 = Button(text='Randomize', size_hint=(None, None), size=(100, field_height), **button_colors)
-		self.btn1.bind(on_release=lambda btn: self.randomize())
+		self.btn1.bind(on_release=handle_exceptions(lambda btn: self.randomize()))
 		self.btn2 = Button(text='Clear', size_hint=(None, None), size=(100, field_height), **button_colors)
-		self.btn2.bind(on_release=lambda btn: self.clear())
+		self.btn2.bind(on_release=handle_exceptions(lambda btn: self.clear()))
 		self.btn3 = Button(text='Load List', size_hint=(None, None), size=(100, field_height), **button_colors)
 
 		# create label for the multiplication sign between width and height
@@ -753,7 +701,7 @@ class SeedGrid(GridLayout):
 		self.btn3.bind(on_release=self.seed_list_dropdown.open)
 		for seed_list in GS.SEED_LISTS:
 			btn = Button(text=seed_list["name"], size_hint_y=None, height=field_height, **dp_button_colors)
-			btn.bind(on_release=lambda btn, seed_list=seed_list: (self.load_seeds(seed_list["seeds"]), self.seed_list_dropdown.dismiss()))
+			btn.bind(on_release=handle_exceptions(lambda btn, seed_list=seed_list: (self.load_seeds(seed_list["seeds"]), self.seed_list_dropdown.dismiss())))
 			self.seed_list_dropdown.add_widget(btn)
 		
 		self.btn_grid = GridLayout(cols=1, size_hint=(None, 1))
@@ -819,20 +767,20 @@ class PromptGrid(GridLayout):
 		self.prompt_inputs = []
 		self.prompt_eval_list = BoxLayout(orientation='vertical', size_hint=(1, 1), size=(100, field_height*4))
 		self.btn1 = Button(text='Row+', size_hint=(1, None), size=(100, field_height), **button_colors)
-		self.btn1.bind(on_release=lambda btn: self.on_increase_rows())
+		self.btn1.bind(on_release=handle_exceptions(lambda btn: self.on_increase_rows()))
 		self.btn2 = Button(text='Row-', size_hint=(1, None), size=(100, field_height), **button_colors)
-		self.btn2.bind(on_release=lambda btn: self.on_decrease_rows())
+		self.btn2.bind(on_release=handle_exceptions(lambda btn: self.on_decrease_rows()))
 		self.btn3 = Button(text='Copy ⁅⁆', size_hint=(1, None), size=(100, field_height), **button_colors)
-		self.btn3.bind(on_release=lambda btn: Clipboard.copy('⁅⁆'))
+		self.btn3.bind(on_release=handle_exceptions(lambda btn: Clipboard.copy('⁅⁆')))
 		self.btn3.font_name = 'Unifont'
 		self.btn4 = Button(text='Inject ⁅⁆', size_hint=(1, None), size=(100, field_height), **button_colors)
-		self.btn4.bind(on_release=lambda btn: setattr(self.prompt_inputs[0], 'text', self.prompt_inputs[0].text+'⁅⁆'))
+		self.btn4.bind(on_release=handle_exceptions(lambda btn: setattr(self.prompt_inputs[0], 'text', self.prompt_inputs[0].text+'⁅⁆')))
 		self.btn4.font_name = 'Unifont'
 		self.btn5 = Button(text='Inject ⁅Seq.⁆', size_hint=(1, None), size=(100, field_height), **button_colors)
-		self.btn5.bind(on_release=lambda btn: setattr(self.prompt_inputs[0], 'text', self.prompt_inputs[0].text+'''⁅'♥‼¡'*n⁆'''))
+		self.btn5.bind(on_release=handle_exceptions(lambda btn: setattr(self.prompt_inputs[0], 'text', self.prompt_inputs[0].text+'''⁅'♥‼¡'*n⁆''')))
 		self.btn5.font_name = 'Unifont'
 		self.btn6 = Button(text='Inject ⁅List⁆', size_hint=(1, None), size=(100, field_height), **button_colors)
-		self.btn6.bind(on_release=lambda btn: setattr(self.prompt_inputs[0], 'text', self.prompt_inputs[0].text+'''⁅['0','1','...'][n]⁆'''))
+		self.btn6.bind(on_release=handle_exceptions(lambda btn: setattr(self.prompt_inputs[0], 'text', self.prompt_inputs[0].text+'''⁅['0','1','...'][n]⁆''')))
 		self.btn6.font_name = 'Unifont'
 		self.btn_grid = GridLayout(cols=1, size_hint=(None, 1), width=115)
 		self.btn_grid.add_widget(self.btn1)
@@ -904,8 +852,8 @@ class Console(BoxLayout):
 
 		self.output_text = Label(text='', font_size=12, size_hint=(1,None), valign='top', markup=True)
 		self.output_text.bind(
-			width=lambda *x: self.output_text.setter('text_size')(self.output_text, (self.output_text.width, None)),
-			texture_size=lambda *x: self.output_text.setter('height')(self.output_text, self.output_text.texture_size[1]))
+			width=handle_exceptions(lambda *x: self.output_text.setter('text_size')(self.output_text, (self.output_text.width, None))),
+			texture_size=handle_exceptions(lambda *x: self.output_text.setter('height')(self.output_text, self.output_text.texture_size[1])))
 		self.output_scroll = ScrollView(size_hint=(1, 1), effect_cls=ScrollEffect)
 		self.output_scroll.add_widget(self.output_text)
 		self.add_widget(self.output_scroll)
@@ -999,8 +947,8 @@ class ResolutionSelector(BoxLayout):
 			# create button for each mode in category
 			for mode in modes:
 				img_button = Button(text=mode, size_hint_y=None, height=field_height, **dp_button_colors)
-				img_button.bind(on_release=lambda img_button: self.set_size(img_button.text, self.resolution_width,
-																			  self.resolution_height, img_dropdown))
+				img_button.bind(on_release=handle_exceptions(lambda img_button: self.set_size(img_button.text, self.resolution_width,
+																			  self.resolution_height, img_dropdown)))
 				img_dropdown.add_widget(img_button)
 
 		# Bind update_resolution_dropdown to changes in width and height input fields
@@ -1008,8 +956,8 @@ class ResolutionSelector(BoxLayout):
 		self.resolution_height.bind(text=self.update_resolution_dropdown)
 
 		# Bind opening of dropdown menu to dropdown button
-		self.resolution_menu_button.bind(on_release=lambda *args: img_dropdown.open(self.resolution_menu_button))
-		img_dropdown.bind(on_select=lambda instance, x: setattr(self.resolution_menu_button, 'text', x))
+		self.resolution_menu_button.bind(on_release=handle_exceptions(lambda *args: img_dropdown.open(self.resolution_menu_button)))
+		img_dropdown.bind(on_select=handle_exceptions(lambda instance, x: setattr(self.resolution_menu_button, 'text', x)))
 
 		# Add widgets to layout
 		self.add_widget(self.resolution_width)
@@ -1143,7 +1091,7 @@ AUTH='{token}'
 		theme_example_layout = GridLayout(cols=2)
 		
 		
-		skip_button = StateShiftButton(text='Skip Generation',on_release=lambda instance: setattr(GS, 'GENERATE_IMAGES', not GS.GENERATE_IMAGES), size_hint=(1,None), size=(100,field_height))
+		skip_button = StateShiftButton(text='Skip Generation',on_release=handle_exceptions(lambda instance: setattr(GS, 'GENERATE_IMAGES', not GS.GENERATE_IMAGES)), size_hint=(1,None), size=(100,field_height))
 		
 		vid_params_label = Label(text='vid_params = ', size_hint=(None,None), size=(100,field_height))
 		self.vid_params_input = TextInput(text = "{'fps': 10,'codec': 'vp9','pixelformat': 'yuvj444p',}", multiline=False, size_hint=(1, None), size=(100, field_height), **input_colors)
@@ -1152,7 +1100,7 @@ AUTH='{token}'
 		#vid_params_layout.add_widget(self.vid_params_input)
 		
 		eval_guard_label = Label(text='f-strings are evaluated in guarded mode', size_hint=(1,None), size=(100,field_height))
-		self.eval_guard_button = DoubleEmojiButton(symbol1='🔰️', symbol2='⚠️',on_release=lambda eval_guard_button: self.switch_eval_behavior(eval_guard_button,eval_guard_label),size_hint=(None,None), size=(field_height,field_height))
+		self.eval_guard_button = DoubleEmojiButton(symbol1='🔰️', symbol2='⚠️',on_release=handle_exceptions(lambda eval_guard_button: self.switch_eval_behavior(eval_guard_button,eval_guard_label)),size_hint=(None,None), size=(field_height,field_height))
 		eval_guard_layout = BoxLayout(orientation='horizontal')
 		eval_guard_layout.add_widget(self.eval_guard_button)
 		eval_guard_layout.add_widget(eval_guard_label)
@@ -1165,7 +1113,7 @@ AUTH='{token}'
 		token_layout.add_widget(token_button)
 		token_layout.add_widget(self.token_state)
 		token_layout.add_widget(self.token_input)
-		self.copy_error_button = Button(text="Copy last error to clipboard", on_release=lambda btn: Clipboard.copy(GS.LAST_ERROR), size_hint=(1,None), size=(100,field_height), disabled=True)
+		self.copy_error_button = Button(text="Copy last error to clipboard", on_release=handle_exceptions(lambda btn: Clipboard.copy(GS.LAST_ERROR)), size_hint=(1,None), size=(100,field_height), disabled=True)
 		
 		layout.add_widget(skip_button)
 		layout.add_widget(vid_params_layout)
@@ -1216,6 +1164,7 @@ class ColorPickerDropDown(BoxLayout):
 		super().__init__(**kwargs)
 		self.orientation = 'vertical'
 		self.options = options
+		self.selected_option = None
 		self.dropdown = DropDown()
 		self.color_picker = ColorPicker()
 		self.color_picker.bind(color=self._on_color_picker_color)
@@ -1229,8 +1178,8 @@ class ColorPickerDropDown(BoxLayout):
 			option_box.add_widget(color_button)
 			self.dropdown.add_widget(option_box)
 
-			color_button.bind(on_release=lambda btn: self.dropdown.select(color_button))
-			color_button.bind(on_release=lambda btn, option=option: self._on_option_button_press(option,btn))
+			color_button.bind(on_release=handle_exceptions(lambda btn: self.dropdown.select(color_button)))
+			color_button.bind(on_release=handle_exceptions(lambda btn, option=option: self._on_option_button_press(option,btn)))
 			if first:
 				self._on_option_button_press(options[0],color_button)
 				first=False

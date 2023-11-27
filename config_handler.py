@@ -69,7 +69,7 @@ USER_UCS = [
 	{'name': 'Hyper SFW', 'string': 'nsfw, nips, vag, pantyshot, upskirt, cameltoe, nude, bare, navel, sex, lewd, spread legs, sexually suggestive, '},
 	{'name': 'Negative Terms', 'string': 'blurry, trash, waste, ugly, hideous, disgusting, disturbing, horrible, deformed, bloody, horror, terrifying, horrendous, malicious, destruction, obliteration, damage, symmetry, disorder, nasty, '},
 	{'name': 'Full: Inverted Positive Terms - Un', 'string': 'unsightly, unpicturesque, unquality, unmasterpiece, unnice, unlovely, unpleasant, unpretty, unfresh, unenchanting, undelightful, unclear, unspectacular, undazzling, ungorgeous, unbrilliant, unterrific, unsuperb, unmagnific, unsharp, unhot, unanatomy, '},
-	{'name': 'Full: Inverted Positive Terms - In', 'string': 'insightly, inpicturesque, inquality, inquality, inmasterpiece, innice, inlovely, inpleasant, inpretty, infresh, inenchanting, indelightful, inclear, inspectacular, indazzling, ingorgeous, inbrilliant, interrific, insuperb, inmagnific, insharp, inhot, inanatomy, '},
+	{'name': 'Full: Inverted Positive Terms - In', 'string': 'insightly, inpicturesque, inquality, inmasterpiece, innice, inlovely, inpleasant, inpretty, infresh, inenchanting, indelightful, inclear, inspectacular, indazzling, ingorgeous, inbrilliant, interrific, insuperb, inmagnific, insharp, inhot, inanatomy, '},
 ]
 """,
 	'2.NAID_Constants':
@@ -109,6 +109,7 @@ NAI_PROMPT_CHUNKS=[
 
 #These are the names used to address certain models
 NAI_MODELS={
+'NAI Anime Full V3':'nai-diffusion-3',
 'NAI Anime Full V2':'nai-diffusion-2',
 'NAI Furry':'nai-diffusion-furry',
 'NAI Curated':'safe-diffusion',

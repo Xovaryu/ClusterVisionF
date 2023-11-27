@@ -61,6 +61,10 @@ class GlobalState(EventDispatcher):
 			cls._instance.LAST_SEED = ''
 			cls._instance.PRE_LAST_SEED = ''
 			cls._instance.PREVIEW_QUEUE = []
+			cls._instance.THEME = None
+			
+			cls._instance.SKIP = 0
+			cls._instance.END = False
 		return cls._instance
 GS = GlobalState()
 
