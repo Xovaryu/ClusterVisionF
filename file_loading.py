@@ -277,7 +277,6 @@ def load_settings_from_image(file_path):
 	try_to_load('steps', GS.main_app.steps_slider_min, comment_dict, 'steps', GS.main_app.steps_import.enabled, 'value')
 	try_to_load('scale', GS.main_app.guidance_input_min, comment_dict, 'scale', GS.main_app.guidance_import.enabled, 'text')
 	try_to_load('guidance_rescale', GS.main_app.guidance_rescale_input_f, comment_dict, 'cfg_rescale', GS.main_app.guidance_import.enabled, 'text')
-	print(comment_dict)
 	if GS.main_app.resolution_import.enabled:
 		GS.main_app.resolution_selector.resolution_width.text = str(metadata["size"][0])
 		GS.main_app.resolution_selector.resolution_height.text = str(metadata["size"][1])
