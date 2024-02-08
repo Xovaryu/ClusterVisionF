@@ -5,6 +5,7 @@ initialization.py
 01.	GlobalState
 			GlobalState is a class that's responsible for organizing all the information that's shared back and forth between all modules
 			GlobalState is a singleton using an adjusted __new__ instead of __init__
+			The point of this is to make sure that the program structure remains understandable, functional and easy to change and improve
 02.	handle_exceptions
 			This is a decorator function used to wrap just about any and every function outside of the Kivy main thread, no matter what it is
 			Its purpose is to prevent any and all silent crashes, make the program maximally robust and report all errors both in the console as well as the app
@@ -39,7 +40,8 @@ class GlobalState(EventDispatcher):
 	def __new__(cls):
 		if cls._instance is None:
 			cls._instance = super().__new__(cls)
-			cls._instance.FULL_DIR = full_dir			
+			cls._instance.main_app = None
+			cls._instance.FULL_DIR = full_dir
 			cls._instance.WAIT_TIME = 1
 			cls._instance.PRODUCED_IMAGES = 0
 			cls._instance.SKIPPED_IMAGES = 0
@@ -62,6 +64,13 @@ class GlobalState(EventDispatcher):
 			cls._instance.PRE_LAST_SEED = ''
 			cls._instance.PREVIEW_QUEUE = []
 			cls._instance.THEME = None
+			cls._instance.registered_text_inputs = []
+			cls._instance.registered_menu_buttons = []
+			cls._instance.registered_dropdown_buttons = []
+			cls._instance.registered_state_buttons = []
+			cls._instance.registered_labels = []
+			cls._instance.registered_bglabels = []
+			cls._instance.registered_tooltiplabels =  []
 			
 			cls._instance.SKIP = 0
 			cls._instance.END = False

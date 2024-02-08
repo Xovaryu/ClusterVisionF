@@ -5,6 +5,7 @@ config_handler.py
 """
 
 import os
+import shutil
 import ast
 import sys
 from initialization import handle_exceptions, GlobalState
@@ -32,7 +33,7 @@ QUALITY_TAGS = {
 'Picturesque': 'picturesque, '
 }
 
-#Additional waiting time between generations, set higher when still using NAI yourself in parallel to avoid getting limited
+#Additional waiting time between generations
 WAIT_TIME = 1
 
 SEED_LISTS = [
@@ -136,50 +137,261 @@ NAI_RESOLUTIONS={
 		'PortraitWallpaper': {'width':1088,'height':1920},
 	},
 }""",
-	'3.Theme':
-"""#Define your desired program colors here, the format is [R, G, B, A] with values from 0 to 1
-THEME = {
-    'InText': {'Name': 'Input: Text', 'value': [1, 1, 1, 1]},
-    'InBg': {'Name': 'Input: Background', 'value': [0, 0, 0, 1]},
-    'ProgText': {'Name': 'Program Text', 'value': [1, 0, 1, 1]},
-    'ProgBg': {'Name': 'Program Background', 'value': [0, 0, 0.3, 1]},
-	
-    'ConNorm': {'Name': 'Console: Normal', 'value': [0, 1, 0, 1]},
-	'ConWarn': {'Name': 'Console: Warning', 'value': [1, 1, 0, 1]},
-    'ConErr': {'Name': 'Console: Error', 'value': [1, 0, 0, 1]},
-    'CatText': {'Name': 'Categories: Text', 'value': [1, 1, 1, 1]},
-    'CatBg': {'Name': 'Categories: Background', 'value': [0.2, 0, 0.2, 1]},
-	
-    'MBtnText': {'Name': 'Main Buttons: Text', 'value': [1, 1, 1, 1]},
-    'MBtnBg': {'Name': 'Main Buttons: Background', 'value': [0.6, 0.6, 0.6, 1]},
-    'DBtnText': {'Name': 'Dropdown Buttons: Text', 'value': [1, 1, 1, 1]},
-    'DBtnBg': {'Name': 'Dropdown Buttons: Background', 'value': [0, 0.6, 0.6, 1]},
-}
-""",
-	'4.Token(DO NOT SHARE)':
+	'3.Token(DO NOT SHARE)':
 """#Only the access token goes into this file. Do not share it with anyone else as that's against NAI ToS. Using it on multiple of your own devices is fine.
 AUTH=''
 """,
+	'Theme':
+"""#Define your desired program colors here or from within CVF, the format is [R, G, B, A] with values from 0 to 1
+THEME = {
+	'InText': {'Name': 'Input: Text', 'value': [1.0, 1.0, 1.0, 1]},
+	'InBg': {'Name': 'Input: Background', 'value': [0.23529411764705882, 0.23529411764705882, 0.23529411764705882, 1]},
+	
+	'ProgText': {'Name': 'Program Text', 'value': [1.0, 1.0, 1.0, 1]},
+	'ProgBg': {'Name': 'Program Background', 'value': [0.2372087574241784, 0.2372087574241784, 0.2372087574241784, 1]},
+	
+	'ConNorm': {'Name': 'Console: Normal', 'value': [0, 1, 0, 1]},
+	'ConWarn': {'Name': 'Console: Warning', 'value': [1, 1, 0, 1]},
+	'ConErr': {'Name': 'Console: Error', 'value': [1, 0, 0, 1]},
+	
+	'DBtnText': {'Name': 'Dropdown Buttons: Text', 'value': [1, 1, 1, 1]},
+	'DBtnBg': {'Name': 'Dropdown Buttons: Background', 'value': [1.0, 0.6442476057217617, 0.0, 1]},
+	
+	'BgLText': {'Name': 'BgLabel: Text', 'value': [1, 1, 1, 1]},
+	'BgLBg': {'Name': 'BgLabel: Background', 'value': [0.12862318066972706, 0.0, 0.12862318066972706, 1]},
+	
+	'MBtnText': {'Name': 'Main Buttons: Text', 'value': [1, 1, 1, 1]},
+	'MBtnBg': {'Name': 'Main Buttons: Background', 'value': [0.2382927636178841, 0.23754457136756696, 0.2382927636178841, 1]},
+	
+	'SBtnText': {'Name': 'State Buttons: Text', 'value': [1, 1, 1, 1]},
+	'SBtnBgOn': {'Name': 'State Buttons: Active', 'value': [0.31063224001618855, 0.7158210883943184, 0.0, 1]},
+	'SBtnBgOff': {'Name': 'State Buttons: Inactive', 'value': [0.8545098888458931, 0.0, 0.0, 1]},
+	
+	'TTText': {'Name': 'Tooltip: Text', 'value': [1.0, 1.0, 1.0, 1]},
+	'TTBg': {'Name': 'Tooltip: Background', 'value': [0, 0, 0, 1]},
+	'TTBgOutline': {'Name': 'Tooltip: Background Outline', 'value': [1.0, 1.0, 1.0, 1]},
 }
-@handle_exceptions
-def write_config_file(config_name,content=False):
-	config_file = os.path.join(GS.FULL_DIR, f"{config_name}.py")
-	if content:
-		with open(config_file, "w", encoding="utf_16") as f:
-			f.write(content)
-	else:
-		with open(config_file, "w", encoding="utf_16") as f:
-			f.write(FALLBACK_CONFIG[config_name])
+""",
+}
+THEMES = {
+	'TemperedGray':
+"""#Define your desired program colors here or from within CVF, the format is [R, G, B, A] with values from 0 to 1
+THEME = {
+	'InText': {'Name': 'Input: Text', 'value': [1.0, 1.0, 1.0, 1]},
+	'InBg': {'Name': 'Input: Background', 'value': [0.23529411764705882, 0.23529411764705882, 0.23529411764705882, 1]},
+	
+	'ProgText': {'Name': 'Program Text', 'value': [1.0, 1.0, 1.0, 1]},
+	'ProgBg': {'Name': 'Program Background', 'value': [0.2372087574241784, 0.2372087574241784, 0.2372087574241784, 1]},
+	
+	'ConNorm': {'Name': 'Console: Normal', 'value': [0, 1, 0, 1]},
+	'ConWarn': {'Name': 'Console: Warning', 'value': [1, 1, 0, 1]},
+	'ConErr': {'Name': 'Console: Error', 'value': [1, 0, 0, 1]},
+	
+	'DBtnText': {'Name': 'Dropdown Buttons: Text', 'value': [1, 1, 1, 1]},
+	'DBtnBg': {'Name': 'Dropdown Buttons: Background', 'value': [1.0, 0.6442476057217617, 0.0, 1]},
+	
+	'BgLText': {'Name': 'BgLabel: Text', 'value': [1, 1, 1, 1]},
+	'BgLBg': {'Name': 'BgLabel: Background', 'value': [0.12862318066972706, 0.0, 0.12862318066972706, 1]},
+	
+	'MBtnText': {'Name': 'Main Buttons: Text', 'value': [1, 1, 1, 1]},
+	'MBtnBg': {'Name': 'Main Buttons: Background', 'value': [0.2382927636178841, 0.23754457136756696, 0.2382927636178841, 1]},
+	
+	'SBtnText': {'Name': 'State Buttons: Text', 'value': [1, 1, 1, 1]},
+	'SBtnBgOn': {'Name': 'State Buttons: Active', 'value': [0.31063224001618855, 0.7158210883943184, 0.0, 1]},
+	'SBtnBgOff': {'Name': 'State Buttons: Inactive', 'value': [0.8545098888458931, 0.0, 0.0, 1]},
+	
+	'TTText': {'Name': 'Tooltip: Text', 'value': [1.0, 1.0, 1.0, 1]},
+	'TTBg': {'Name': 'Tooltip: Background', 'value': [0, 0, 0, 1]},
+	'TTBgOutline': {'Name': 'Tooltip: Background Outline', 'value': [1.0, 1.0, 1.0, 1]},
+}
+""",
+	'OriginalBlue':
+"""#Define your desired program colors here or from within CVF, the format is [R, G, B, A] with values from 0 to 1
+THEME = {
+	'InText': {'Name': 'Input: Text', 'value': [1, 1, 1, 1]},
+	'InBg': {'Name': 'Input: Background', 'value': [0, 0, 0, 1]},
+	
+	'ProgText': {'Name': 'Program Text', 'value': [1, 0, 1, 1]},
+	'ProgBg': {'Name': 'Program Background', 'value': [0, 0, 0.3, 1]},
+	
+	'ConNorm': {'Name': 'Console: Normal', 'value': [0, 1, 0, 1]},
+	'ConWarn': {'Name': 'Console: Warning', 'value': [1, 1, 0, 1]},
+	'ConErr': {'Name': 'Console: Error', 'value': [1, 0, 0, 1]},
+	
+	'DBtnText': {'Name': 'Dropdown Buttons: Text', 'value': [1, 1, 1, 1]},
+	'DBtnBg': {'Name': 'Dropdown Buttons: Background', 'value': [0, 0.6, 0.6, 1]},
+	
+	'BgLText': {'Name': 'BgLabel: Text', 'value': [1, 1, 1, 1]},
+	'BgLBg': {'Name': 'BgLabel: Background', 'value': [0.2, 0, 0.2, 1]},
+	
+	'MBtnText': {'Name': 'Main Buttons: Text', 'value': [1, 1, 1, 1]},
+	'MBtnBg': {'Name': 'Main Buttons: Background', 'value': [0.6, 0.6, 0.6, 1]},
+	
+	'SBtnText': {'Name': 'State Buttons: Text', 'value': [1, 1, 1, 1]},
+	'SBtnBgOn': {'Name': 'State Buttons: Active', 'value': [0, 1, 0, 1]},
+	'SBtnBgOff': {'Name': 'State Buttons: Inactive', 'value': [1, 0, 0, 1]},
+	
+	'TTText': {'Name': 'Tooltip: Text', 'value': [1.0, 1.0, 1.0, 1]},
+	'TTBg': {'Name': 'Tooltip: Background', 'value': [0, 0, 0, 1]},
+	'TTBgOutline': {'Name': 'Tooltip: Background Outline', 'value': [1.0, 1.0, 1.0, 1]},
+}
+""",
+	'Obsidian':
+"""#Define your desired program colors here or from within CVF, the format is [R, G, B, A] with values from 0 to 1
+THEME = {
+	'InText': {'Name': 'Input: Text', 'value': [1.0, 1.0, 1.0, 1]},
+	'InBg': {'Name': 'Input: Background', 'value': [0.12862318066972706, 0.12862318066972706, 0.12862318066972706, 1]},
+	
+	'ProgText': {'Name': 'Program Text', 'value': [0.9074111241592825, 0.9074111241592825, 1.0, 1]},
+	'ProgBg': {'Name': 'Program Background', 'value': [0.0, 0.0, 0.0, 1]},
+	
+	'ConNorm': {'Name': 'Console: Normal', 'value': [0, 1, 0, 1]},
+	'ConWarn': {'Name': 'Console: Warning', 'value': [1, 1, 0, 1]},
+	'ConErr': {'Name': 'Console: Error', 'value': [1, 0, 0, 1]},
+	
+	'DBtnText': {'Name': 'Dropdown Buttons: Text', 'value': [1, 1, 1, 1]},
+	'DBtnBg': {'Name': 'Dropdown Buttons: Background', 'value': [0, 0.6, 0.6, 1]},
+	
+	'BgLText': {'Name': 'BgLabel: Text', 'value': [1, 1, 1, 1]},
+	'BgLBg': {'Name': 'BgLabel: Background', 'value': [0.12862318066972706, 0.0, 0.12862318066972706, 1]},
+	
+	'MBtnText': {'Name': 'Main Buttons: Text', 'value': [1, 1, 1, 1]},
+	'MBtnBg': {'Name': 'Main Buttons: Background', 'value': [0.23933661359454952, 0.46083342229813884, 0.23933661359454952, 1]},
+	
+	'SBtnText': {'Name': 'State Buttons: Text', 'value': [1, 1, 1, 1]},
+	'SBtnBgOn': {'Name': 'State Buttons: Active', 'value': [0.0, 0.6786762036938186, 1.0, 1]},
+	'SBtnBgOff': {'Name': 'State Buttons: Inactive', 'value': [0.8747347069499306, 0.7137254901960784, 0.0, 1]},
+	
+	'TTText': {'Name': 'Tooltip: Text', 'value': [1.0, 1.0, 1.0, 1]},
+	'TTBg': {'Name': 'Tooltip: Background', 'value': [0, 0, 0, 1]},
+	'TTBgOutline': {'Name': 'Tooltip: Background Outline', 'value': [1.0, 1.0, 1.0, 1]},
+}
+""",
+	'Midnight':
+"""#Define your desired program colors here or from within CVF, the format is [R, G, B, A] with values from 0 to 1
+THEME = {
+	'InText': {'Name': 'Input: Text', 'value': [0.8470588235294118, 0.8470588235294118, 1.0, 1]},
+	'InBg': {'Name': 'Input: Background', 'value': [0.06044852155452447, 0.06044852155452447, 0.06044852155452447, 1]},
+	
+	'ProgText': {'Name': 'Program Text', 'value': [0.8431372549019608, 0.8431372549019608, 1.0, 1]},
+	'ProgBg': {'Name': 'Program Background', 'value': [0.0, 0.0, 0.0, 1]},
+	
+	'ConNorm': {'Name': 'Console: Normal', 'value': [0, 1, 0, 1]},
+	'ConWarn': {'Name': 'Console: Warning', 'value': [1, 1, 0, 1]},
+	'ConErr': {'Name': 'Console: Error', 'value': [1, 0, 0, 1]},
+	
+	'DBtnText': {'Name': 'Dropdown Buttons: Text', 'value': [1, 1, 1, 1]},
+	'DBtnBg': {'Name': 'Dropdown Buttons: Background', 'value': [0.0, 0.3764193445073129, 0.3764193445073129, 1]},
+	
+	'BgLText': {'Name': 'BgLabel: Text', 'value': [0.8447813245080247, 0.8447813245080247, 1, 1]},
+	'BgLBg': {'Name': 'BgLabel: Background', 'value': [0.12862318066972706, 0.0, 0.12862318066972706, 1]},
+	
+	'MBtnText': {'Name': 'Main Buttons: Text', 'value': [0.8447813245080247, 0.8447813245080247, 1, 1]},
+	'MBtnBg': {'Name': 'Main Buttons: Background', 'value': [0.2382927636178841, 0.23754457136756696, 0.2382927636178841, 1]},
+	
+	'SBtnText': {'Name': 'State Buttons: Text', 'value': [1, 1, 1, 1]},
+	'SBtnBgOn': {'Name': 'State Buttons: Active', 'value': [0.0, 0.5425244653215189, 0.0, 1]},
+	'SBtnBgOff': {'Name': 'State Buttons: Inactive', 'value': [0.6596149603216966, 0.0, 0.0, 1]},
+	
+	'TTText': {'Name': 'Tooltip: Text', 'value': [1.0, 1.0, 1.0, 1]},
+	'TTBg': {'Name': 'Tooltip: Background', 'value': [0, 0, 0, 1]},
+	'TTBgOutline': {'Name': 'Tooltip: Background Outline', 'value': [1.0, 1.0, 1.0, 1]},
+}
+""",
+	'BrightBurns':
+"""#Define your desired program colors here or from within CVF, the format is [R, G, B, A] with values from 0 to 1
+THEME = {
+	'InText': {'Name': 'Input: Text', 'value': [0.0, 0.0, 0.0, 1]},
+	'InBg': {'Name': 'Input: Background', 'value': [1.0, 1.0, 1.0, 1]},
+	
+	'ProgText': {'Name': 'Program Text', 'value': [0.0, 0.0, 0.0, 1]},
+	'ProgBg': {'Name': 'Program Background', 'value': [1.0, 1.0, 1.0, 1]},
+	
+	'ConNorm': {'Name': 'Console: Normal', 'value': [0.0, 0.5771322879427437, 0.0, 1]},
+	'ConWarn': {'Name': 'Console: Warning', 'value': [0.6967853706852787, 0.6967853706852787, 0.0, 1]},
+	'ConErr': {'Name': 'Console: Error', 'value': [0.3894944990964957, 0.0, 0.0, 1]},
+	
+	'DBtnText': {'Name': 'Dropdown Buttons: Text', 'value': [1, 1, 1, 1]},
+	'DBtnBg': {'Name': 'Dropdown Buttons: Background', 'value': [0.0, 1.0, 1.0, 1]},
+	
+	'BgLText': {'Name': 'BgLabel: Text', 'value': [0.0, 0.0, 0.0, 1]},
+	'BgLBg': {'Name': 'BgLabel: Background', 'value': [0.9170558184613091, 0.9415303126586458, 0.9116170419730121, 1]},
+	
+	'MBtnText': {'Name': 'Main Buttons: Text', 'value': [1.0, 1.0, 1.0, 1]},
+	'MBtnBg': {'Name': 'Main Buttons: Background', 'value': [1.0, 0.9968601973515363, 1.0, 1]},
+	
+	'SBtnText': {'Name': 'State Buttons: Text', 'value': [1, 1, 1, 1]},
+	'SBtnBgOn': {'Name': 'State Buttons: Active', 'value': [0.0, 0.5425244653215189, 0.0, 1]},
+	'SBtnBgOff': {'Name': 'State Buttons: Inactive', 'value': [0.6596149603216966, 0.0, 0.0, 1]},
+	
+	'TTText': {'Name': 'Tooltip: Text', 'value': [1.0, 1.0, 1.0, 1]},
+	'TTBg': {'Name': 'Tooltip: Background', 'value': [0, 0, 0, 1]},
+	'TTBgOutline': {'Name': 'Tooltip: Background Outline', 'value': [1.0, 1.0, 1.0, 1]},
+}
+""",
+}
+GS.SETTINGS_DIR = os.path.join(GS.FULL_DIR, "Settings") 
+GS.THEMES_DIR = os.path.join(GS.SETTINGS_DIR, "Themes")
+os.makedirs(GS.THEMES_DIR, exist_ok=True)  
 
+# This dict contains all the files that must be loaded to get the program running
+CONFIG_FILES = {
+	"1.User_Settings": os.path.join(GS.SETTINGS_DIR, "1.User_Settings.py"),
+	"2.NAID_Constants": os.path.join(GS.SETTINGS_DIR, "2.NAID_Constants.py"),
+	"3.Token(DO NOT SHARE)": os.path.join(GS.SETTINGS_DIR, "3.Token(DO NOT SHARE).py"),
+	"Theme": os.path.join(GS.THEMES_DIR, "Current.py"),
+}
+
+# This block here is responsible for moving legacy config files to their new intended locations
+FILES_TO_MOVE = ["1.User_Settings.py", "2.NAID_Constants.py", "3.Theme.py", "4.Token(DO NOT SHARE).py"] 
+for file in FILES_TO_MOVE:
+	# Build paths
+	old_path = os.path.join(GS.FULL_DIR, file)
+	if file == "3.Theme.py":
+		new_path = os.path.join(GS.THEMES_DIR, "Current.py") 
+	elif file == "4.Token(DO NOT SHARE).py":
+		new_path = os.path.join(GS.SETTINGS_DIR, "3.Token(DO NOT SHARE).py") 
+	else:
+		new_path = os.path.join(GS.SETTINGS_DIR, file)
+
+	# Check if old file exists
+	if os.path.exists(old_path):
+		# Move file to new location
+		shutil.move(old_path, new_path)
+
+# A simple config writing function that can either just take the name of the missing config file to write from the fallback, or a full location/content input
+# Uses UTF-16 so there's as little problem as possible when using the deep variety of symbols SD in its different forms can make use of
 @handle_exceptions
-def load_config_file(config_name):
+def write_config_file(config_name, content=None):
+	if content: 
+		with open(config_name, "w", encoding="utf-16") as f:
+			f.write(content) 
+	else:
+		config_path = CONFIG_FILES.get(config_name)
+		with open(config_path, "w", encoding="utf-16") as f:
+		   f.write(FALLBACK_CONFIG[config_name])
+
+# Simple function to recursively update and overwrite dicts without breaking references
+@handle_exceptions
+def merge_dicts(old, new):
+    for key, value in new.items():
+        if isinstance(value, dict):
+            # Nested dict, merge recursively 
+            old[key] = merge_dicts(old.get(key, {}), value)
+        else:
+            # Overwrite 
+            old[key] = value 
+    return old
+
+# Excused from using @handle_exceptions due to custom error handling
+def load_config(config, direct_mode = False):
 	try:
-		config_file = os.path.join(GS.FULL_DIR, f"{config_name}.py")
-		if not os.path.exists(config_file):
-			write_config_file(config_name)
-		with open(config_file, "r", encoding="utf_16") as f:
-			config_str = f.read()
-		config_ast = ast.parse(config_str, filename=config_file)
+		if direct_mode:
+			config_str = config
+		else:
+			with open(config, "r", encoding="utf_16") as f:
+				config_str = f.read()
+		config_ast = ast.parse(config_str, filename=config)
 		config_dict = {}
 		for node in config_ast.body:
 			if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
@@ -187,12 +399,24 @@ def load_config_file(config_name):
 				value = ast.literal_eval(node.value)
 				config_dict[target_name] = value
 		for key, value in config_dict.items():
-			setattr(GS, key, value)
-		#globals().update(config_dict)
+			existing_value = getattr(GS, key, None)
+			if existing_value and isinstance(existing_value, dict):
+				merged_value = merge_dicts(existing_value, value)
+			else:
+				setattr(GS, key, value)
 	except Exception as e:
-		print(f'Failed to load {config_name}.py! Fix or delete the according file.')
+		print(f'Failed to load {config}.py! Fix or delete the according file.')
 		import traceback
 		traceback.print_exc()
 
-for config_name in FALLBACK_CONFIG:
-	load_config_file(config_name)
+# This loop uses the dict from above and figures out if the according config files exists and tries to load them if they do, and tries to create them if they don't
+load_config(FALLBACK_CONFIG["Theme"], direct_mode = True)
+for name, path in CONFIG_FILES.items():
+	if not os.path.exists(path):
+		print(f"{name} config not found at {path}, writing default...")
+		write_config_file(name) # using default configs
+	else:  
+		load_config(path) #load located config file
+for name, content in THEMES.items():
+	if not os.path.exists(os.path.join(GS.THEMES_DIR, f"{name}.py")):
+		write_config_file(os.path.join(GS.THEMES_DIR, f"{name}.py"), content)

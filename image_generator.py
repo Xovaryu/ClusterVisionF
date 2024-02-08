@@ -27,7 +27,7 @@ image_generator.py
 			Same as above, just for image sequences
 10.	cluster_sequence + cluster_sequence_processor
 			Same as above, just for cluster sequences which is a combination of the two types of tasks above
-11.	steps_scale_pre_processor + steps_scale_processor
+11.	steps_guidance_pre_processor + steps_guidance_processor
 			These two functions are responsible for taking the user input and turning them into lists of the actual scales/steps to render
 12.	process_queue
 			This is the main loop to process all tasks in the queue
@@ -92,8 +92,10 @@ def form_prompt(settings,number=1,noise=0.1,strength=0.4):
 			'n_samples': number,
 			#Sampler as in UI
 			'sampler': settings["sampler"],
-			#Scale as in UI
+			#Guidance as in UI
 			'scale': settings["scale"],
+			#Prompt Guidance Rescale as in UI
+			'cfg_rescale': settings["guidance_rescale"],
 			#Steps as in UI
 			'steps': settings["steps"],
 			#Noise as in UI and thus ineffective for standard generation
@@ -102,7 +104,9 @@ def form_prompt(settings,number=1,noise=0.1,strength=0.4):
 			'strength': strength,
 			'sm': settings["smea"],
 			'sm_dyn': settings["dyn"],
+			# Decrisper
 			'dynamic_thresholding': settings["dynamic_thresholding"],
+			# These are settings for the decrisper that are NOT visible on the website
 			'dynamic_thresholding_mimic_scale': settings["dynamic_thresholding_mimic_scale"],
 			'dynamic_thresholding_percentile': settings["dynamic_thresholding_percentile"],
 			'quality toggle': False,
@@ -126,36 +130,40 @@ def image_gen(auth,prompt,filepath,enumerator,token_test=False):
 		api_header=f'Bearer {auth}'
 		if not GS.OVERWRITE_IMAGES and not token_test:
 			if os.path.isfile(filepath):
+				print(f'[Warning] {filepath} is already present and has not been overwritten')
 				skipped = True
 				break
-		if token_test:
-			resp=requests.post(GS.URL,json.dumps(prompt[0]),headers={'Authorization': api_header,'Content-Type': 'application/json','accept': 'application/json',})
-			resp_content=resp.content
-			resp_length=len(resp_content)
-			if resp_length>1000:
-				return 'Success'
-			elif resp_content == b'{"statusCode":401,"message":"Invalid accessToken."}' or resp_content == b'{"statusCode":400,"message":"Invalid Authorization header content."}':
-				return 'Error'
+		response = None
 		try:
 			print(prompt)
 			print(f'''{enumerator}\nDecrisp: {prompt[0]["parameters"]["dynamic_thresholding"]}{" | MS: " + str(prompt[0]["parameters"]["dynamic_thresholding_mimic_scale"]) + " | " + str(prompt[0]["parameters"]["dynamic_thresholding_percentile"]) + "%ile" if prompt[0]["parameters"]["dynamic_thresholding"] else ""}''')
 			print(f'''Model: {prompt[0]["model"]}\nPrompt:\n{prompt[0]["input"]}\nUC:\n{prompt[0]["parameters"]["negative_prompt"]}''')
 
 			start=time.time()
-			resp=requests.post(GS.URL,json.dumps(prompt[0]),headers={'Authorization': api_header,'Content-Type': 'application/json','accept': 'application/json',})
-			resp_content=resp.content
-			resp_length=len(resp_content)
-			if resp_length>1000:
-				print(f'Response length: {resp_length}')
-			elif resp_content == b'{"statusCode":401,"message":"Invalid accessToken."}' or resp_content == b'{"statusCode":400,"message":"Invalid Authorization header content."}':
-				print(f'[Warning] Invalid access token. Please fetch your token from the website.')
-				return 'Error'
-			else:
-				print(f'Likely fault detected: {resp_content}')
+			response=requests.post(GS.URL,json.dumps(prompt[0]),headers={'Authorization': api_header,'Content-Type': 'application/json','accept': 'application/json',})
 			end=time.time()
 			processing_time=end-start
-			print(f'NAI Server Generation Time:{(processing_time)}s')
-			with zipfile.ZipFile(io.BytesIO(resp_content), "r") as zip_file:
+			print(f'Response Time:{(processing_time)}s')
+			if token_test:
+				if response.status_code == 200:
+					return 'Success'
+				else:
+					try: # This try/except block only serves the singular purpose to prevent the program from ever getting stuck here and possibly accidentally DDoSing the server
+						return GS.error_popup.show_generation_error(response)
+					except:
+						return 'Error'
+			
+			
+			if response.status_code == 400 or response.status_code == 401:
+				print(f'Invalid access token. Please fetch your token from the website.', file=sys.stderr)
+				return 'Error'
+			elif response.status_code >= 402 and response.status_code < 500:
+				GS.error_popup.show_generation_error(response)
+				return 'Error'
+			elif response.status_code > 500:
+				raise ValueError('Server failed to respond with an image.')
+
+			with zipfile.ZipFile(io.BytesIO(response.content), "r") as zip_file:
 				for file_name in zip_file.namelist():
 					if file_name.endswith(".png"):
 						with zip_file.open(file_name) as png_file:
@@ -166,7 +174,12 @@ def image_gen(auth,prompt,filepath,enumerator,token_test=False):
 							t.close()
 			break
 		except:
-			traceback.print_exc()
+			if response == None:
+				print(f'[Warning] Failed to get any server response')
+			elif response.status_code >= 500:
+				print(f'[Warning] {response.status_code} | Server message: {json.loads(response.content)["message"]}')
+			else:
+				traceback.print_exc()
 			print(f'[Warning] Creation error encounted. Retrying after: {min(retry_time,15)}s')
 			for i in range(min(retry_time,15)):
 				time.sleep(1)
@@ -202,47 +215,6 @@ def generate_seed_cluster(dimensions):
 # ---Additional Media Functions---
 # 4. These are the functions to make videos if requested, though they are still in need of quite a bit of cleaning up and love
 @handle_exceptions
-def make_vid_ffmpeg(vid_path, img_futures, num_frames, fps=7, base_path='__0utput__', codec='vp9', quality=10, pixelformat='yuv420p'):
-	print('Parallel video thread started')
-	
-	# Determine frame size from the first completed image future
-	first_img_future = img_futures.get()
-	h, w, _ = np.array(first_img_future.result()).shape
-	frameSize = (w, h)
-
-	# Mapping of codecs to file extensions
-	codec_extensions = {
-		'vp9': '.webm',
-		'h264': '.mp4',
-		'h265': '.mp4',
-		'mpeg4': '.mp4',
-		'libxvid': '.avi',
-		# add more codecs and their extensions as needed
-	}
-
-	# Get the file extension for the chosen codec
-	extension = codec_extensions.get(codec, '.webm')  # default to .webm if codec not in dict
-
-	# Construct full video path with correct extension
-	full_vid_folder_path = f'{base_path}/{vid_path}'
-	os.makedirs(full_vid_folder_path, exist_ok=True)
-	
-	# Initialize video writer
-	writer = imageio.get_writer(full_vid_folder_path+extension, fps=fps, codec=codec, quality=quality, pixelformat=pixelformat)
-
-	# Write first frame to video
-	writer.append_data(np.array(first_img_future.result()))
-
-	# Write remaining frames to video
-	for _ in range(num_frames - 1):
-		future = img_futures.get()
-		img = future.result()
-		writer.append_data(np.array(img))
-	writer.close()
-
-	print('Finished making video')
-
-@handle_exceptions
 def make_vid(vid_params, vid_path, img_futures, num_frames, base_path='__0utput__'):
 	print('Parallel video thread started')
 
@@ -263,8 +235,8 @@ def make_vid(vid_params, vid_path, img_futures, num_frames, base_path='__0utput_
 	os.makedirs(full_vid_folder_path, exist_ok=True)
 	
 	# Initialize video writer
-	writer = imageio.get_writer(full_vid_folder_path+extension, **vid_params)
-	print(vid_params['fps'])
+	writer = imageio.get_writer(full_vid_folder_path+extension, mode='I', format='ffmpeg', quality=10, **vid_params)
+	#print(vid_params['fps'])
 	# Determine frame size from the first completed image future
 	first_img_future_or_str = img_futures.get()
 	expecting_strs = False # IS will return paths while CS will return the cluster collages directly, so we need to check for what we're working with
@@ -297,6 +269,71 @@ def make_vid(vid_params, vid_path, img_futures, num_frames, base_path='__0utput_
 	writer.close()
 
 	print('Finished making video')
+
+import subprocess
+import os
+
+@handle_exceptions
+def make_vid_ffmpeg(vid_params, vid_path, img_futures, num_frames):
+
+    # Build FFmpeg command
+    ffmpeg_cmd = ['ffmpeg', '-y'] 
+    
+    ffmpeg_cmd.extend(['-framerate', vid_params['fps']])  
+    ffmpeg_cmd.extend(['-i', 'pipe:'])
+    
+    ffmpeg_cmd.extend(['-vcodec', vid_params['codec'], '-qscale:v', '3'])
+    ffmpeg_cmd.extend([vid_path])
+
+    # Start pipe 
+    p = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
+
+    # Handle first frame
+    first_img = handle_img(img_futures.get())
+    
+    # Encode first frame 
+    buffer = BytesIO() 
+    first_img.save(buffer, format="PNG")
+    frame = buffer.getvalue()   
+    p.stdin.write(frame)
+
+    # Cleanup first frame
+    buffer.close()
+    del first_img
+
+    # Write remainder frames
+    for _ in range(num_frames - 1):
+        
+        img = handle_img(img_futures.get())
+        
+        buffer = BytesIO()
+        img.save(buffer, format="PNG")
+        
+        p.stdin.write(buffer.getvalue())  
+        
+        buffer.close()
+        del img
+        
+    # Finalize FFmpeg  
+    p.stdin.close()
+    p.wait()
+
+    print_status(vid_path)
+    
+    
+# Helper handles both future and string paths from queue   
+def handle_img(img):
+    if isinstance(img, str):
+        return Image.open(img)  
+    else:
+        return img.result()
+        
+def print_status(vid_path):
+
+    if os.path.exists(vid_path):
+        print("Video created")
+    else: 
+        print("Failed")
 
 # Calls flowframes to interpolate an existing video, will run in parallel
 @handle_exceptions
@@ -394,11 +431,11 @@ def attach_metadata_header(img_collages,settings,name_extra, cc=''):
 		line_height*currently_used_lines, left_meta_block, available_lines, line_height, (255,255,255,0), break_symbol = '|')
 	currently_used_lines=currently_used_lines+used_lines_steps
 	
-	# Scale, using the FFW to linebreak at |
+	# Guidance, using the FFW to linebreak at |
 	available_lines = available_lines - used_lines_steps
 	scale = settings["scale"]
-	scale_string = 'Scale: ' + (scale if isinstance(scale, str) and "⁅" in scale else '|'.join(str(s) for s in settings["meta"]["scale"]))
-	draw, img_header, used_lines_scale=TM.fallback_font_writer(draw, img_header, scale_string, 10,
+	guidance_string = 'Scale: ' + (scale if isinstance(scale, str) and "⁅" in scale else '|'.join(str(s) for s in settings["meta"]["scale"]))
+	draw, img_header, used_lines_scale=TM.fallback_font_writer(draw, img_header, guidance_string, 10,
 		line_height*currently_used_lines, left_meta_block, available_lines, line_height, (255,255,255,0), break_symbol = '|')
 	currently_used_lines=currently_used_lines+used_lines_scale
 	
@@ -433,6 +470,7 @@ def attach_metadata_header(img_collages,settings,name_extra, cc=''):
 	available_lines = currently_used_lines-used_lines_prompt
 
 	full_UC=settings["negative_prompt"]
+	time.sleep(10)
 	draw, img_header, used_lines_uc=TM.fallback_font_writer(draw, img_header, full_UC, left_meta_block, line_height*(used_lines_prompt),
 		img_collages.size[0]-left_meta_block, available_lines, line_height, (255,180,180,0), explicit_space = True)
 
@@ -458,10 +496,10 @@ def attach_metadata_header(img_collages,settings,name_extra, cc=''):
 # 7. Simply formats and passes the prompt to image_gen, used for simple generations, complex external logic or an auth token test
 @handle_exceptions
 def generate_as_is(settings,enumerator,token_test=False,token=''):
-	if token_test:
-		settings = {'name': 'Test', 'folder_name': '', 'folder_name_extra': '', 'model': 'nai-diffusion', 'seed': 0, 'sampler': 'k_euler_ancestral', 'scale': 10.0,
+	if token_test: #This is the raw testing dict used when evaluating whether a user token us usable or not
+		settings = {'name': 'Test', 'folder_name': '', 'folder_name_extra': '', 'model': 'nai-diffusion', 'seed': 0, 'sampler': 'k_euler_ancestral', 'noise_schedule': 'native', 'scale': 10.0,
 			'steps': 1, 'img_mode': {'width': 64, 'height': 64}, 'prompt': 'Test', 'negative_prompt': 'Test', 'smea': False, 'dyn': False, 'dynamic_thresholding': False,
-			'dynamic_thresholding_mimic_scale': 10, 'dynamic_thresholding_percentile': 0.999, 'uncond_scale': 0.9}
+			'dynamic_thresholding_mimic_scale': 10, 'dynamic_thresholding_percentile': 0.999, 'uncond_scale': 0.9, 'guidance_rescale': 0, 'negative_prompt_strength': 1}
 		return image_gen(token,form_prompt(settings),'','',token_test=True)
 	final_settings=copy.deepcopy(settings)
 	if settings["sampler"].endswith('_dyn'):
@@ -532,7 +570,7 @@ def cluster_collage_processor(settings, cc='', cs_rendered_imgs=1):
 	img_settings=copy.deepcopy(settings)
 
 	#Configures steps and scale lists
-	steps_scale_pre_processor(settings)
+	steps_guidance_pre_processor(settings)
 
 	#Configure the folder structure if the user specified something extra
 	if img_settings.get('folder_name_user'):
@@ -560,7 +598,7 @@ def cluster_collage_processor(settings, cc='', cs_rendered_imgs=1):
 						if GS.CANCEL_REQUEST:
 							return
 						#Load in the correct values for steps, scale and seed
-						steps_scale_processor(settings,img_settings,{'n':n,'c':c,'r':r,'cc':cc,'s':s})
+						steps_guidance_processor(settings,img_settings,{'n':n,'c':c,'r':r,'cc':cc,'s':s})
 						img_settings["seed"]=seed
 						#Process f-string if necessary
 						if type(settings["prompt"])!=str:
@@ -654,7 +692,7 @@ def image_sequence_processor(settings):
 	imgs=[]
 	img_settings=copy.deepcopy(settings)
 
-	steps_scale_pre_processor(settings)
+	steps_guidance_pre_processor(settings)
 
 	img_settings["folder_name_extra"]=''
 	rendered_imgs=1
@@ -681,7 +719,7 @@ def image_sequence_processor(settings):
 	for n in range(settings["quantity"]):
 		if GS.CANCEL_REQUEST:
 			return
-		steps_scale_processor(settings, img_settings, {'n':n})
+		steps_guidance_processor(settings, img_settings, {'n':n})
 		enumerator=f'''({img_settings["seed"]})(#{str((n+1)).rjust(4,'0')})'''
 		enumerator+=f'(Scale꞉{img_settings["scale"]})(Steps꞉{img_settings["steps"]})'
 		#Process f-string if necessary
@@ -774,7 +812,7 @@ def cluster_sequence_processor(settings):
 
 # 11. This function handles the pre-processing of steps and scale, it takes the settings from the user input and makes it computible per image
 @handle_exceptions
-def steps_scale_pre_processor(settings):
+def steps_guidance_pre_processor(settings):
 	settings["meta"]["steps"] = []
 	settings["meta"]["scale"] = []
 	if settings["meta"].get('imgs_per_collage'):
@@ -799,8 +837,8 @@ def steps_scale_pre_processor(settings):
 
 # This function takes the passed variables and pre-processed steps/scale values and returns the desired value for the current image
 @handle_exceptions
-def steps_scale_processor(settings, img_settings, var_dict):
-	for key, func1, func2 in [("steps", int, int), ("scale", float, handle_exceptions(lambda x: round(x, 6)))]:
+def steps_guidance_processor(settings, img_settings, var_dict):
+	for key, func1, func2 in [("steps", int, int), ("scale", float, handle_exceptions(lambda x: round(x, 6))), ("guidance_rescale", float, handle_exceptions(lambda x: round(x, 6)))]:
 		value = settings[key]
 		img_settings[key] = (func2(func1(TM.f_string_processor([['f"""' + str(value) + '"""']], settings["meta"]["eval_guard"], var_dict))) if isinstance(value, str)
 			else (settings["meta"][key][0] if len(settings["meta"][key]) == 1 else func2(settings["meta"][key][var_dict['n']])))
