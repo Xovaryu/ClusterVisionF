@@ -64,6 +64,7 @@ I also have a discord server where I organize all my AI image generation endeavo
 -For debugging purposes build() is no longer excused from using @handle_exceptions since even there some crashes can be silent...  
 -Console colors now actively change too, but that only works properly when all console colors remain distinct  
 -Fixed an issue that could cause steps/scale to not be shown on cluster collages  
+-Very quick production of cluster collages could possibly cause uncaught issues due to parallel access to font files, those are now properly cached  
 
 ### Known Issues
 -Selecting any part of text also visually affects the token counter, this bug is seemingly purely visual  
