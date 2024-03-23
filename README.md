@@ -51,6 +51,7 @@ I also have a discord server where I organize all my AI image generation endeavo
 -The sampler list field required exact usage of spaces, but it really shouldn't fail just because of more or less spaces, improved that  
 -Fixed the case of constants/variables in GS  
 -A new URL is needed to run third party NAI image generations, and the constants file with those now updates automatically  
+-Added live updated trackers for the state of queued/done/skipped tasks/images  
 
 #### Bug Fixes
 -RAM Leak: The list that is dynamically rebuilt for the "Load Theme" button didn't get unregistered and hence the buttons lingered after each click  
