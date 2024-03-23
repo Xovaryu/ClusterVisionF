@@ -26,7 +26,7 @@ kivy_widgets.py
 			Similar to the classes above but with definable text instead
 12.	StateFButton
 			Used for the (negative) prompt fields to switch the text input and rehook the injector
-13.	InjectorDropDown + ConditionalInjectorDropDown
+13.	InjectorDropDown + SamplerInjectorDropDown
 			This class creates a dropdown that is tied to a text field and can inject it's valuees, the conditional variant supports on/off buttons in the dropdown
 14.	ScrollDropDownButton
 			This is just a slightly more advanced dropdown button that supports scrolling when hovering
@@ -50,6 +50,9 @@ kivy_widgets.py
 			A full pre-assembled layout for the entire theme handling part currently implemented into the configuration window
 24.	ErrorPopup
 			This is an error popup that is currently only used for the token setting and testing
+25.	ExecPopup
+			This is a hidden popup that has one primary use, and that is debugging
+			To that end this popup allows direct use of exec() and is as such littered with warnings, and never gets initialized until the user manually opens and activates it
 """
 from initialization import handle_exceptions, GlobalState, CH
 GS = GlobalState()
@@ -63,12 +66,16 @@ import traceback
 import itertools
 import kivy
 import json
+import time
 from PIL import Image as PILImage
+from PIL import ImageDraw as PILImageDraw
 import image_generator as IM_G
 import text_manipulation as TM
+#import documentation as DOC
 from kivy.core.clipboard import Clipboard
 from kivy.core.window import Window
 from kivy.effects.dampedscroll import ScrollEffect
+from kivy.base import EventLoop
 from kivy.graphics import Color, Rectangle, Line
 from kivy.graphics.texture import Texture
 from kivy.properties import BooleanProperty
@@ -81,7 +88,7 @@ from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.uix.textinput import TextInput
 from kivy.uix.colorpicker import ColorPicker
-from kivy.uix.image import AsyncImage
+from kivy.uix.image import AsyncImage, Image
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.popup import Popup
 from kivy.clock import Clock
@@ -107,7 +114,7 @@ LabelBase.register(name='Unifont', fn_regular=GS.FULL_DIR + 'Fonts/unifont_jp-15
 #LabelBase.register(name='NotoSansJP', fn_regular=GS.FULL_DIR + 'Fonts/NotoSansJP-VF.ttf')
 LabelBase.register(name='NotoEmoji', fn_regular=GS.FULL_DIR + 'Fonts/NotoEmoji-VariableFont_wght.ttf')
 
-# Functions used to link the SMEA and Dyn buttons in such a way that enabling Dyn makes sure SMEA is enabled, and that disabled SMEA disabled Dyn
+# Functions used to link the SMEA and Dyn buttons in such a way that enabling Dyn makes sure SMEA is enabled, and that disabling SMEA disables Dyn
 @handle_exceptions
 def on_smea_disabled(value, linked_button):
 	if not value:
@@ -120,14 +127,14 @@ def on_dyn_enabled(value, linked_button):
 # 01. These are simply basic Kivy widgets that are slightly updated to automatically register themselves for applications of themes
 class Label(Label):
 	@handle_exceptions
-	def __init__(self, register_to = GS.registered_labels, initial_text_color = GS.THEME["ProgText"]["value"], **kwargs):
+	def __init__(self, register_to = GS.registered_labels, initial_text_color = GS.theme["ProgText"]["value"], **kwargs):
 		super().__init__(**kwargs)
 		register_to.append(self) if register_to != None else None
 		self.color = initial_text_color
 
 class Button(Button):
 	@handle_exceptions
-	def __init__(self, register_to = GS.registered_menu_buttons, initial_text_color = GS.THEME["MBtnText"]["value"], initial_bg_color = GS.THEME["MBtnBg"]["value"], **kwargs):
+	def __init__(self, register_to = GS.registered_menu_buttons, initial_text_color = GS.theme["MBtnText"]["value"], initial_bg_color = GS.theme["MBtnBg"]["value"], **kwargs):
 		super().__init__(**kwargs)
 		if register_to != None:
 			register_to.append(self)
@@ -136,7 +143,7 @@ class Button(Button):
 
 class TextInput(TextInput):
 	@handle_exceptions
-	def __init__(self, register_to = GS.registered_text_inputs, initial_text_color = GS.THEME["InText"]["value"], initial_bg_color = GS.THEME["InBg"]["value"],**kwargs):
+	def __init__(self, register_to = GS.registered_text_inputs, initial_text_color = GS.theme["InText"]["value"], initial_bg_color = GS.theme["InBg"]["value"],**kwargs):
 		super().__init__(foreground_color = initial_text_color, background_color = initial_bg_color, **kwargs)
 		register_to.append(self)
 		self.tooltip = ToolTip(associated_widget=self, auto_width=False, size_hint=(1, 1))
@@ -155,12 +162,12 @@ class TextInput(TextInput):
 class DropDownButton(Button):
 	@handle_exceptions
 	def __init__(self, **kwargs):
-		super().__init__(register_to = GS.registered_dropdown_buttons, initial_text_color = GS.THEME["DBtnText"]["value"], initial_bg_color = GS.THEME["DBtnBg"]["value"],**kwargs)
+		super().__init__(register_to = GS.registered_dropdown_buttons, initial_text_color = GS.theme["DBtnText"]["value"], initial_bg_color = GS.theme["DBtnBg"]["value"],**kwargs)
 
 # 02. A special label with a convenient integrated background, used for stuff like more complex dropdown lists
 class BgLabel(Label):
 	@handle_exceptions
-	def __init__(self, register_to = GS.registered_bglabels, initial_text_color = GS.THEME["BgLText"]["value"], initial_bg_color = GS.THEME["BgLBg"]["value"],**kwargs):
+	def __init__(self, register_to = GS.registered_bglabels, initial_text_color = GS.theme["BgLText"]["value"], initial_bg_color = GS.theme["BgLBg"]["value"],**kwargs):
 		super().__init__(register_to = register_to, initial_text_color = initial_text_color, **kwargs)
 		with self.canvas.before:
 			Color(*initial_bg_color)  # set the background color here
@@ -205,7 +212,10 @@ class ScrollInput(TextInput):
 			self.fi_mode = fi_mode
 			self.input_filter = fi_mode.__name__
 			self.hybrid_mode = False
-		else:
+		elif fi_mode == 'hybrid_int':
+			self.fi_mode = int
+			self.hybrid_mode = True
+		elif fi_mode == 'hybrid_float':
 			self.fi_mode = float
 			self.hybrid_mode = True
 		self.allow_empty = allow_empty
@@ -235,9 +245,9 @@ class ScrollInput(TextInput):
 				# User entered an invalid value, this normally shouldn't be possible
 				self.text = format(self.min_value, f'.{self.round_value}f').rstrip('0').rstrip('.')
 
-	# When scrolling to change numerical values this function sets the desired increment according to which buttons are pressed
+	# When scrolling to change numerical values this function sets the new value based on the old value and increment according to which buttons are pressed
 	@handle_exceptions
-	def calculate_increment(self):
+	def calculate_new_value(self, value, positive):
 		keyboard = Window.request_keyboard(None, self)
 		if 'alt' in Window._modifiers:
 			if 'shift' in Window._modifiers:
@@ -257,7 +267,12 @@ class ScrollInput(TextInput):
 			current_increment = self.increment
 		if self.fi_mode == int and current_increment < 1:
 			current_increment = 1
-		return self.fi_mode(current_increment)
+		
+		current_increment = self.fi_mode(current_increment)
+		new_value = value + current_increment if positive else value - current_increment
+		new_value = min(max(new_value, self.min_value), self.max_value)
+		new_value = round(new_value,self.round_value)
+		return new_value
 
 	@handle_exceptions
 	def on_touch_down(self, touch):
@@ -271,7 +286,6 @@ class ScrollInput(TextInput):
 		if touch.button in ('scrolldown', 'scrollup'):
 			if self.selection_text:
 				# Text is selected, adjust the selected part
-				
 				try:
 					value = self.fi_mode(self.selection_text)
 
@@ -281,15 +295,13 @@ class ScrollInput(TextInput):
 					else:
 						start, end = self.selection_to, self.selection_from
 
-					increment = self.calculate_increment()
-					new_value = value + increment if touch.button == 'scrolldown' else value - increment
-					new_value = min(max(new_value, self.min_value), self.max_value)
+					new_value = str(self.calculate_new_value(value, touch.button == 'scrolldown'))
 
 					# Replace the selected text with the new value
-					self.text = self.text[:start] + str(new_value) + self.text[end:]
+					self.text = self.text[:start] + new_value + self.text[end:]
 
 					# Maintain the selection with adjusted indexes
-					self.select_text(start, start + len(str(new_value)))
+					self.select_text(start, start + len(new_value))
 				except ValueError:
 					pass
 
@@ -308,9 +320,7 @@ class ScrollInput(TextInput):
 
 						try:
 							value = self.fi_mode(number_text)
-							increment = self.calculate_increment()
-							new_value = value + increment if touch.button == 'scrolldown' else value - increment
-							new_value = min(max(new_value, self.min_value), self.max_value)
+							new_value = self.calculate_new_value(value, touch.button == 'scrolldown')
 
 							new_text = self.text[:start] + str(new_value) + self.text[end:]
 							self.text = new_text
@@ -320,9 +330,7 @@ class ScrollInput(TextInput):
 						except ValueError:
 							pass
 				else: #The field can be parsed, simply adjust it directly
-					increment = self.calculate_increment()
-					new_value = value + increment if touch.button == 'scrolldown' else value - increment
-					new_value = min(max(new_value, self.min_value), self.max_value)
+					new_value = self.calculate_new_value(value, touch.button == 'scrolldown')
 
 					# Set the whole text to the new value
 					self.text = str(new_value)
@@ -386,9 +394,9 @@ class SeedScrollInput(ScrollInput):
 		elif keycode[1] == 'c':
 			self.text = ''
 		elif keycode[1] == 'p':
-			self.text = GS.PRE_LAST_SEED
+			self.text = GS.pre_last_seed
 		elif keycode[1] == 'l':
-			self.text = GS.LAST_SEED
+			self.text = GS.last_seed
 		return super().keyboard_on_key_down(keyboard, keycode, text, modifiers)
 
 # 08. This is a widget to at least approximate the token cost of a prompt
@@ -462,12 +470,12 @@ class DoubleEmojiButton(Button):
 	@handle_exceptions
 	def on_state_changed(self, *args):
 		if self.enabled:
-			self.background_color = GS.THEME["SBtnBgOn"]["value"]
+			self.background_color = GS.theme["SBtnBgOn"]["value"]
 			self.text = self.symbol1
 		else:
-			self.background_color = GS.THEME["SBtnBgOff"]["value"]
+			self.background_color = GS.theme["SBtnBgOff"]["value"]
 			self.text = self.symbol2
-		self.color = GS.THEME["SBtnText"]["value"]
+		self.color = GS.theme["SBtnText"]["value"]
 
 	@handle_exceptions
 	def on_release(self):
@@ -495,10 +503,10 @@ class StateShiftButton(Button):
 	@handle_exceptions
 	def on_state_changed(self, *args):
 		if self.enabled:
-			self.background_color = GS.THEME["SBtnBgOn"]["value"]
+			self.background_color = GS.theme["SBtnBgOn"]["value"]
 		else:
-			self.background_color = GS.THEME["SBtnBgOff"]["value"]
-		self.color = GS.THEME["SBtnText"]["value"]
+			self.background_color = GS.theme["SBtnBgOff"]["value"]
+		self.color = GS.theme["SBtnText"]["value"]
 
 	@handle_exceptions
 	def on_release(self):
@@ -591,15 +599,15 @@ class InjectorDropDown(BoxLayout):
 	def append_to_text_box(self, string, item_layout):
 		self.target.text += string
 
-class ConditionalInjectorDropDown(InjectorDropDown):
+class SamplerInjectorDropDown(InjectorDropDown):
 	@handle_exceptions
 	def __init__(self, dropdown_list=[], button_text='', target=None, **kwargs):
 		super().__init__(dropdown_list=dropdown_list, button_text=button_text, target=target, **kwargs)
 
 	@handle_exceptions
 	def add_button(self, item, *args):
-		item_layout, item_string = super(ConditionalInjectorDropDown, self).add_button(item, *args)
-		if not (item_string == 'ddim, ' or item_string == 'plms, '):
+		item_layout, item_string = super(SamplerInjectorDropDown, self).add_button(item, *args)
+		if not (item_string == 'ddim' or item_string == 'plms'):
 			sampler_smea = StateShiftButton(text='SMEA', size_hint=(None, 1), size=(70,field_height))
 			sampler_dyn = StateShiftButton(text='Dyn', size_hint=(None, 1), size=(70,field_height))
 
@@ -610,27 +618,28 @@ class ConditionalInjectorDropDown(InjectorDropDown):
 
 	@handle_exceptions
 	def copy_to_clipboard(self, string, item_layout):
-		string = self.attach_smea_dyn(string, item_layout)
+		string = self.attach_noise_smea_dyn(string, item_layout)
 		Clipboard.copy(string)
 
 	@handle_exceptions
 	def prepend_to_text_box(self, string, item_layout):
-		string = self.attach_smea_dyn(string, item_layout)
+		string = self.attach_noise_smea_dyn(string, item_layout)
 		self.target.text = string + self.target.text
 
 	@handle_exceptions
 	def append_to_text_box(self, string, item_layout):
-		string = self.attach_smea_dyn(string, item_layout)
+		string = self.attach_noise_smea_dyn(string, item_layout)
 		self.target.text += string
-	
+
 	@handle_exceptions
-	def attach_smea_dyn(self, string, item_layout):
-		if type(item_layout.children[1]) == StateShiftButton:
+	def attach_noise_smea_dyn(self, string, item_layout):
+		string += '_' + GS.MAIN_APP.noise_schedule_button.text
+		if type(item_layout.children[1]) == StateShiftButton: # If the sampler doesn't have these buttons that's a sign that it's not supported anyway and we skip
 			if item_layout.children[1].enabled: #Dyn
-				string = string[:-2] + '_dyn' + string[-2:]
+				string += '_dyn'
 			elif item_layout.children[2].enabled: #SMEA
-				string = string[:-2] + '_smea' + string[-2:]
-		return string
+				string += '_smea'
+		return string + ', '
 
 # 14. A slightly more advanced dropdown button that allows scrolling values without opening the dropdown
 class ScrollDropDownButton(Button):
@@ -661,7 +670,7 @@ class ScrollDropDownButton(Button):
 				# Get previous index dropdown list
 				index = (current_index - 1) % len(self.children)
 			self.set_state_func(index)
-		return super(ScrollDropDownButton, self).on_touch_down(touch)
+		return super().on_touch_down(touch)
 
 # 15. Class for the Cluster Collage/Image Sequence/Cluster Sequence buttons at the top, also handles showing/hiding the according elements and has bools for its state
 class ModeSwitcher(BoxLayout):
@@ -678,9 +687,9 @@ class ModeSwitcher(BoxLayout):
 		self.add_widget(self.cc_button)
 		self.add_widget(self.is_button)
 		self.add_widget(self.cs_button)
-		self.cc_button.background_color = GS.THEME["SBtnBgOn"]["value"]
-		self.is_button.background_color = GS.THEME["SBtnBgOff"]["value"]
-		self.cs_button.background_color = GS.THEME["SBtnBgOff"]["value"]
+		self.cc_button.background_color = GS.theme["SBtnBgOn"]["value"]
+		self.is_button.background_color = GS.theme["SBtnBgOff"]["value"]
+		self.cs_button.background_color = GS.theme["SBtnBgOff"]["value"]
 	
 	# These functions are responsible for switching between the cluster collage and image sequence layouts
 	@handle_exceptions
@@ -725,6 +734,9 @@ class ModeSwitcher(BoxLayout):
 				widget.width = 0
 				widget.size_hint_y = None
 				widget.size_hint_x = None
+				
+				widget.ori_children = widget.children[::-1]
+				widget.clear_widgets()
 
 	@handle_exceptions
 	def unhide_widgets(self, widgets):
@@ -735,15 +747,19 @@ class ModeSwitcher(BoxLayout):
 				widget.width = widget.ori_width
 				widget.size_hint_y = widget.ori_size_hint_y
 				widget.size_hint_x = widget.ori_size_hint_x
+				
+				widget.clear_widgets()
+				for child in widget.ori_children:
+					widget.add_widget(child)
 		except:
 			pass
 	
 	@handle_exceptions
 	def update_state_color(self, f):
-		self.cc_button.background_color = GS.THEME["SBtnBgOn"]["value"] if self.cc_active else GS.THEME["SBtnBgOff"]["value"]
-		self.is_button.background_color = GS.THEME["SBtnBgOn"]["value"] if self.is_active else GS.THEME["SBtnBgOff"]["value"]
-		self.cs_button.background_color = GS.THEME["SBtnBgOn"]["value"] if self.cs_active else GS.THEME["SBtnBgOff"]["value"]
-		self.cc_button.color, self.is_button.color, self.cs_button.color = GS.THEME["SBtnText"]["value"], GS.THEME["SBtnText"]["value"], GS.THEME["SBtnText"]["value"]
+		self.cc_button.background_color = GS.theme["SBtnBgOn"]["value"] if self.cc_active else GS.theme["SBtnBgOff"]["value"]
+		self.is_button.background_color = GS.theme["SBtnBgOn"]["value"] if self.is_active else GS.theme["SBtnBgOff"]["value"]
+		self.cs_button.background_color = GS.theme["SBtnBgOn"]["value"] if self.cs_active else GS.theme["SBtnBgOff"]["value"]
+		self.cc_button.color, self.is_button.color, self.cs_button.color = GS.theme["SBtnText"]["value"], GS.theme["SBtnText"]["value"], GS.theme["SBtnText"]["value"]
 
 # 16. SeedGrid class for seed grids when making cluster collages
 class SeedGrid(GridLayout):
@@ -764,11 +780,11 @@ class SeedGrid(GridLayout):
 		self.seed_cols_input.bind(text=self.adjust_grid_size)
 		self.seed_rows_input.bind(text=self.adjust_grid_size)
 
-		self.btn1 = Button(text='Randomize', size_hint=(None, None), size=(100, field_height))
+		self.btn1 = Button(text='Randomize', size_hint=(1, None), size=(100, field_height))
 		self.btn1.bind(on_release=handle_exceptions(lambda btn: self.randomize()))
-		self.btn2 = Button(text='Clear', size_hint=(None, None), size=(100, field_height))
+		self.btn2 = Button(text='Clear', size_hint=(1, None), size=(100, field_height))
 		self.btn2.bind(on_release=handle_exceptions(lambda btn: self.clear()))
-		self.btn3 = Button(text='Load List', size_hint=(None, None), size=(100, field_height))
+		self.btn3 = Button(text='Load List', size_hint=(1, None), size=(100, field_height))
 
 		# create label for the multiplication sign between width and height
 		self.seed_list_dropdown = DropDown()
@@ -919,10 +935,15 @@ class Console(BoxLayout):
 			pass
 
 	@handle_exceptions
-	def __init__(self, max_lines=200, **kwargs):
+	def __init__(self, max_lines=180, **kwargs):
 		super().__init__(**kwargs)
+		self.update_console_colors()
 		self.orientation = 'vertical'
 		self.max_lines = max_lines
+		self.message_cache = ''
+		self.error_cache = ''
+		self.ui_console_cache = ''
+		self.flush_scheduled = False
 
 		self.output_text = Label(text='', font_size=12, size_hint=(1,None), valign='top', markup=True)
 		self.output_text.bind(
@@ -935,21 +956,44 @@ class Console(BoxLayout):
 		self._stderr = sys.stderr
 		sys.stdout = self.pass_out = self.TerminalPass(type='out', parent=self)
 		sys.stderr = self.pass_err = self.TerminalPass(type='err', parent=self)
+		Clock.schedule_interval(self.flush_message_caches, 0.5)
 
 	# No @handle_exceptions here. As the function that is responsible for intercepting and splitting terminal messsages it's handled differently, lest we get loops
 	def process_message(self, message, type):
-		def update_label_text(dt):
-			try:
-				if message.startswith("[Warning]"):
-					self._stdout.write(message)
-					self.output_text.text += f'{self.rgba_to_string(GS.THEME["ConWarn"]["value"])}{message[len("[Warning] "):]}[/color]'
-				elif type == 'out':
-					self._stdout.write(message)
-					self.output_text.text += f'{self.rgba_to_string(GS.THEME["ConNorm"]["value"])}{message}[/color]'
-				elif type == 'err':
-					self._stderr.write(message)
-					self.output_text.text += f'{self.rgba_to_string(GS.THEME["ConErr"]["value"])}{message}[/color]'
+		try:
+			if message.startswith("[Warning]"):
+				self.message_cache += message
+				self.ui_console_cache += f'{self.rgba_to_string(GS.current_console_colors["ConWarn"]["value"])}{message[len("[Warning] "):]}[/color]'
+			elif type == 'out':
+				self.message_cache += message
+				if message.replace(' ', '').replace('\n', '') == '':
+					self.ui_console_cache += message
+				else:
+					self.ui_console_cache += f'{self.rgba_to_string(GS.current_console_colors["ConNorm"]["value"])}{message}[/color]'
+			elif type == 'err':
+				self.error_cache += message
+				self.ui_console_cache += f'{self.rgba_to_string(GS.current_console_colors["ConErr"]["value"])}{message}[/color]'
+		except:
+			# As this function would loop when using the normal print statement but still needs debugging support we also use _stderr for exceptions
+			self._stderr.write(traceback.format_exc())
 
+	# Because any printing of messages is generally speaking aggressively inefficient and performance hungry, we cache everything and flush it twice per second
+	# Excused from @handle_exceptions for the same reasons as the function above
+	def flush_message_caches(self, dt):
+		try:
+			self.fix_console_text = False
+			if self.message_cache != '':
+				self._stdout.write(self.message_cache)
+				self.message_cache = ''
+			if self.error_cache != '':
+				self._stderr.write(self.error_cache)
+				self.error_cache = ''
+			if self.ui_console_cache != '':
+				self.output_text.text += self.ui_console_cache
+				self.ui_console_cache = ''
+				self.fix_console_text = True
+			
+			if self.fix_console_text:
 				# Split the text into lines
 				lines = self.output_text.text.splitlines()
 				# Check if the line length was exceeded
@@ -960,16 +1004,28 @@ class Console(BoxLayout):
 					next_closing_tag_idx = trimmed_text.find('[/color]')
 					# Trim accordingly and update the text
 					self.output_text.text = trimmed_text[next_closing_tag_idx + len('[/color]'):]
-			except:
-				# As this function would loop when using the normal print statement but still needs debugging support we also use _stderr for exceptions
+		except:
 				self._stderr.write(traceback.format_exc())
 
-		Clock.schedule_once(update_label_text)
-	
 	# Converts a color in the format kivy uses into a tag that the KW.Console class can use
 	@handle_exceptions
 	def rgba_to_string(self, color):
 		return '[color={}{}'.format(''.join(hex(int(c * 255))[2:].zfill(2) for c in color), ']')
+
+	@handle_exceptions
+	def update_console_colors(self):
+		if not getattr(self, 'output_text', False):
+			GS.current_console_colors = {"ConNorm": copy.deepcopy(GS.theme["ConNorm"]), "ConWarn": copy.deepcopy(GS.theme["ConWarn"]), "ConErr": copy.deepcopy(GS.theme["ConErr"])}
+			return
+		else:
+			replacement_list = [[self.rgba_to_string(x), self.rgba_to_string(y)] for x, y in zip(
+			[GS.current_console_colors["ConNorm"]["value"], GS.current_console_colors["ConWarn"]["value"], GS.current_console_colors["ConErr"]["value"]],
+			[GS.theme["ConNorm"]["value"], GS.theme["ConWarn"]["value"], GS.theme["ConErr"]["value"]])]
+			for colors in replacement_list:
+				self.output_text.text = self.output_text.text.replace(str(colors[0]), str(colors[1]))
+			GS.current_console_colors["ConNorm"]["value"] = copy.copy(GS.theme["ConNorm"]["value"])
+			GS.current_console_colors["ConWarn"]["value"] = copy.copy(GS.theme["ConWarn"]["value"])
+			GS.current_console_colors["ConErr"]["value"] = copy.copy(GS.theme["ConErr"]["value"])
 
 	@handle_exceptions
 	def flush(self):
@@ -1134,9 +1190,17 @@ AUTH='{token}'
 			label.text = '''WARNING: f-strings are evaluated without restrictions, be thrice certain you don't blindly import malicious settings'''
 
 	@handle_exceptions
-	def check_for_error(self,instance):
-		if GS.LAST_ERROR != None:
+	def check_for_error(self, instance):
+		if GS.last_error != None:
 			self.copy_error_button.disabled = False
+	
+	@handle_exceptions
+	def open(self, instance):
+		modifiers = EventLoop.window.modifiers
+		if 'ctrl' in modifiers and 'shift' in modifiers and 'alt' in modifiers:
+			GS.exec_popup.open()
+		else:
+			return super().open(instance)
 
 	@handle_exceptions
 	def __init__(self, **kwargs):
@@ -1149,7 +1213,7 @@ AUTH='{token}'
 		theme_example_layout = GridLayout(cols=2)
 		
 		
-		skip_button = StateShiftButton(text='Skip Generation',on_release=handle_exceptions(lambda instance: setattr(GS, 'GENERATE_IMAGES', not GS.GENERATE_IMAGES)), size_hint=(1,None), size=(100,field_height))
+		skip_button = StateShiftButton(text='Skip Generation',on_release=handle_exceptions(lambda instance: setattr(GS, 'GENERATE_IMAGES', not GS.generate_images)), size_hint=(1,None), size=(100,field_height))
 		
 		vid_params_label = Label(text='vid_params = ', size_hint=(None,None), size=(100,field_height))
 		self.vid_params_input = TextInput(text = "{'fps': 10,'codec': 'vp9','pixelformat': 'yuvj444p',}", multiline=False, size_hint=(1, None), size=(100, field_height))
@@ -1164,6 +1228,7 @@ AUTH='{token}'
 		eval_guard_layout.add_widget(eval_guard_label)
 		
 		# Set up and add all the necessary elements for token handling
+		#handle_exceptions(lambda instance: GS.EXECUTOR.submit(self.process_token)
 		token_button = Button(text='Set NovelAI token (DO NOT SHARE):', on_release=self.process_token, size_hint=(1,None), size=(100,field_height))
 		self.token_state = BgLabel(font_name='NotoEmoji', text='❔', size_hint=(None,None), size=(field_height,field_height), register_to = None)
 		token_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=field_height)
@@ -1171,7 +1236,7 @@ AUTH='{token}'
 		token_layout.add_widget(token_button)
 		token_layout.add_widget(self.token_state)
 		token_layout.add_widget(self.token_input)
-		self.copy_error_button = Button(text='Copy last error to clipboard', on_release=handle_exceptions(lambda btn: Clipboard.copy(GS.LAST_ERROR)), size_hint=(1,None), size=(100,field_height), disabled=True)
+		self.copy_error_button = Button(text='Copy last error to clipboard', on_release=handle_exceptions(lambda btn: Clipboard.copy(GS.last_error)), size_hint=(1,None), size=(100,field_height), disabled=True)
 		
 		layout.add_widget(skip_button)
 		#layout.add_widget(vid_params_layout)
@@ -1223,7 +1288,7 @@ class ThemeLayout(BoxLayout):
 		first=True
 		self.color_buttons = []
 		# This loop builds the dropdown list for all the adjustable colors from the loaded theme
-		for key, option in GS.THEME.items():
+		for key, option in GS.theme.items():
 			option_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=50)
 			color_button = ThemeButton(text=option["Name"], starting_color=option["value"], size_hint_x=None, width=250)
 			color_button.associated_dict=option
@@ -1261,43 +1326,46 @@ class ThemeLayout(BoxLayout):
 		self.color_picker.color = button.associated_dict["value"]
 		self.dropdown_button.text = button.associated_dict["Name"]
 
-	# Adjusts GS.THEME
+	# Adjusts GS.theme
 	@handle_exceptions
 	def on_color_picker_color(self, instance, selected_color):
 		self.selected_option.associated_dict["value"]=selected_color
 
-	# Applies GS.THEME to all the registered widgets and saves the applied theme to Current.py so it's used like that in future runs
+	# Applies GS.theme to all the registered widgets and saves the applied theme to Current.py so it's used like that in future runs
 	@handle_exceptions
 	def apply_theme(self, instance):
 		for color_button in self.color_buttons:
 			color_button.update_rect(None, None)
-		Window.clearcolor = GS.THEME["ProgBg"]['value']
+		Window.clearcolor = GS.theme["ProgBg"]['value']
 		for label in GS.registered_labels:
-			label.color = GS.THEME["ProgText"]["value"]
+			label.color = GS.theme["ProgText"]["value"]
 		for input in GS.registered_text_inputs:
-			input.foreground_color = GS.THEME["InText"]["value"]
-			input.background_color = GS.THEME["InBg"]["value"]
+			input.foreground_color = GS.theme["InText"]["value"]
+			input.background_color = GS.theme["InBg"]["value"]
 		for button in GS.registered_menu_buttons:
-			button.color = GS.THEME["MBtnText"]["value"]
-			button.background_color = GS.THEME["MBtnBg"]["value"]
+			button.color = GS.theme["MBtnText"]["value"]
+			button.background_color = GS.theme["MBtnBg"]["value"]
 		for button in GS.registered_dropdown_buttons:
-			button.color = GS.THEME["DBtnText"]["value"]
-			button.background_color = GS.THEME["DBtnBg"]["value"]
+			button.color = GS.theme["DBtnText"]["value"]
+			button.background_color = GS.theme["DBtnBg"]["value"]
 		for BgLabel in GS.registered_bglabels:
-			BgLabel.color = GS.THEME["BgLText"]["value"]
-			BgLabel.update_color(None, GS.THEME["BgLBg"]["value"])
+			BgLabel.color = GS.theme["BgLText"]["value"]
+			BgLabel.update_color(None, GS.theme["BgLBg"]["value"])
 		for state_button in GS.registered_state_buttons:
 			state_button.on_state_changed(None)
-		GS.main_app.mode_switcher.update_state_color(None)
+		GS.MAIN_APP.console.update_console_colors()
+		GS.MAIN_APP.mode_switcher.update_state_color(None)
 		self.save_theme(None,'Current')
 
 	# Called by the "Load Theme" button, always rebuilds the list from the current state of the themes folder
 	@handle_exceptions
 	def build_theme_dropdown(self,instance):
+		for btn in self.theme_dropdown.children[0].children:
+		   GS.registered_dropdown_buttons.remove(btn)
 		self.theme_dropdown.clear_widgets()
 		self.theme_files = [f for f in os.listdir(GS.THEMES_DIR) if f.endswith('.py')]
 		for theme in self.theme_files:
-			btn = DropDownButton(text=os.path.splitext(theme)[0], size_hint_y = None, height = 44, width = 1000 )
+			btn = DropDownButton(text=os.path.splitext(theme)[0], size_hint_y = None, height = 44, width = 1000)
 			btn.bind(on_release=lambda btn: self.load_theme(btn.text))
 			self.theme_dropdown.add_widget(btn)
 		self.theme_dropdown.open(self.load_button)
@@ -1307,41 +1375,42 @@ class ThemeLayout(BoxLayout):
 	def load_theme(self, theme):
 		self.theme_dropdown.dismiss()
 		CH.load_config(os.path.join(GS.THEMES_DIR, f'{theme}.py'))
+		path=GS.THEMES_DIR, f'{theme}.py'
 		self.apply_theme(None)
-		self.color_picker.color=GS.THEME[self.selected_option.associated_key]["value"]
+		self.color_picker.color=GS.theme[self.selected_option.associated_key]["value"]
 
-	# Saves the theme currently configured in the color picker using GS.THEME, which isn't necessarily the applied theme the program currently uses
+	# Saves the theme currently configured in the color picker using GS.theme, which isn't necessarily the applied theme the program currently uses
 	@handle_exceptions
 	def save_theme(self, instance, path=None):
 		if self.theme_name_input.text != '' or path != None:
 			config_content = f"""#Define your desired program colors here or from within CVF, the format is [R, G, B, A] with values from 0 to 1
 THEME = {{
-	'InText': {{'Name': 'Input: Text', 'value': {GS.THEME["InText"]["value"]}}},
-	'InBg': {{'Name': 'Input: Background', 'value': {GS.THEME["InBg"]["value"]}}},
+	'InText': {{'Name': 'Input: Text', 'value': {GS.theme["InText"]["value"]}}},
+	'InBg': {{'Name': 'Input: Background', 'value': {GS.theme["InBg"]["value"]}}},
 	
-	'ProgText': {{'Name': 'Program Text', 'value': {GS.THEME["ProgText"]["value"]}}},
-	'ProgBg': {{'Name': 'Program Background', 'value': {GS.THEME["ProgBg"]["value"]}}},
+	'ProgText': {{'Name': 'Program Text', 'value': {GS.theme["ProgText"]["value"]}}},
+	'ProgBg': {{'Name': 'Program Background', 'value': {GS.theme["ProgBg"]["value"]}}},
 	
-	'ConNorm': {{'Name': 'Console: Normal', 'value': {GS.THEME["ConNorm"]["value"]}}},
-	'ConWarn': {{'Name': 'Console: Warning', 'value': {GS.THEME["ConWarn"]["value"]}}},
-	'ConErr': {{'Name': 'Console: Error', 'value': {GS.THEME["ConErr"]["value"]}}},
+	'ConNorm': {{'Name': 'Console: Normal', 'value': {GS.theme["ConNorm"]["value"]}}},
+	'ConWarn': {{'Name': 'Console: Warning', 'value': {GS.theme["ConWarn"]["value"]}}},
+	'ConErr': {{'Name': 'Console: Error', 'value': {GS.theme["ConErr"]["value"]}}},
 	
-	'DBtnText': {{'Name': 'Dropdown Buttons: Text', 'value': {GS.THEME["DBtnText"]["value"]}}},
-	'DBtnBg': {{'Name': 'Dropdown Buttons: Background', 'value': {GS.THEME["DBtnBg"]["value"]}}},
+	'DBtnText': {{'Name': 'Dropdown Buttons: Text', 'value': {GS.theme["DBtnText"]["value"]}}},
+	'DBtnBg': {{'Name': 'Dropdown Buttons: Background', 'value': {GS.theme["DBtnBg"]["value"]}}},
 	
-	'BgLText': {{'Name': 'BgLabel: Text', 'value': {GS.THEME["BgLText"]["value"]}}},
-	'BgLBg': {{'Name': 'BgLabel: Background', 'value': {GS.THEME["BgLBg"]["value"]}}},
+	'BgLText': {{'Name': 'BgLabel: Text', 'value': {GS.theme["BgLText"]["value"]}}},
+	'BgLBg': {{'Name': 'BgLabel: Background', 'value': {GS.theme["BgLBg"]["value"]}}},
 	
-	'MBtnText': {{'Name': 'Main Buttons: Text', 'value': {GS.THEME["MBtnText"]["value"]}}},
-	'MBtnBg': {{'Name': 'Main Buttons: Background', 'value': {GS.THEME["MBtnBg"]["value"]}}},
+	'MBtnText': {{'Name': 'Main Buttons: Text', 'value': {GS.theme["MBtnText"]["value"]}}},
+	'MBtnBg': {{'Name': 'Main Buttons: Background', 'value': {GS.theme["MBtnBg"]["value"]}}},
 	
-	'SBtnText': {{'Name': 'State Buttons: Text', 'value': {GS.THEME["SBtnText"]["value"]}}},
-	'SBtnBgOn': {{'Name': 'State Buttons: Active', 'value': {GS.THEME["SBtnBgOn"]["value"]}}},
-	'SBtnBgOff': {{'Name': 'State Buttons: Inactive', 'value': {GS.THEME["SBtnBgOff"]["value"]}}},
+	'SBtnText': {{'Name': 'State Buttons: Text', 'value': {GS.theme["SBtnText"]["value"]}}},
+	'SBtnBgOn': {{'Name': 'State Buttons: Active', 'value': {GS.theme["SBtnBgOn"]["value"]}}},
+	'SBtnBgOff': {{'Name': 'State Buttons: Inactive', 'value': {GS.theme["SBtnBgOff"]["value"]}}},
 	
-	'TTText': {{'Name': 'Tooltip: Text', 'value': {GS.THEME["TTText"]["value"]}}},
-	'TTBg': {{'Name': 'Tooltip: Background', 'value': {GS.THEME["TTBg"]["value"]}}},
-	'TTBgOutline': {{'Name': 'Tooltip: Background Outline', 'value': {GS.THEME["TTBgOutline"]["value"]}}},
+	'TTText': {{'Name': 'Tooltip: Text', 'value': {GS.theme["TTText"]["value"]}}},
+	'TTBg': {{'Name': 'Tooltip: Background', 'value': {GS.theme["TTBg"]["value"]}}},
+	'TTBgOutline': {{'Name': 'Tooltip: Background Outline', 'value': {GS.theme["TTBgOutline"]["value"]}}},
 }}
 """
 			if path == None:
@@ -1383,22 +1452,85 @@ class ErrorPopup(ModalView):
 		return 'Error'
 GS.error_popup = ErrorPopup()
 
+# 25. A spicy hidden developer dialogue, not intended for playing around and fun times
+class ExecPopup(ModalView):
+	@handle_exceptions
+	def __init__(self, **kwargs):
+		super().__init__(**kwargs)
+		self.size_hint=(None, None)
+		self.size=(dp(400),dp(400))
+		self.padding = (dp(5), dp(5), dp(5), dp(5))
+		self.initial_warning_label = Label(text='''This is a developer tool for debugging first and foremost, it'll create and open an interface for arbitrary code execution.
+Executing malicious code in here WILL damage your system. Do NOT use this if you don't know what you're doing and why.
+Do NOT run code in here that you do not trust. You have been warned.''', font_name = 'Roboto-Bold')
+		self.initial_warning_button = Button(text="I know what I'm doing, and I'm not going to run code that'll ruin this system, let me execute", font_name = 'Roboto-Bold')
+		self.initial_warning_button.bind(on_release=self.exec_init)
+		self.layout = BoxLayout(orientation='vertical')
+		self.layout.add_widget(self.initial_warning_label)
+		self.layout.add_widget(self.initial_warning_button)
+		self.add_widget(self.layout)
+
+	@handle_exceptions
+	def exec_init(self, instance):
+		self.layout.remove_widget(self.initial_warning_label)
+		self.layout.remove_widget(self.initial_warning_button)
+		self.ns = {}
+		self.exec_input = TextInput(multiline=True, size_hint=(1, 1))
+		self.exec_button = Button(text="⚠⚠⚠EXECUTE⚠⚠⚠", font_name = 'Unifont', size_hint=(1, None), size=(100, field_height))
+		self.layout.add_widget(self.exec_input)
+		self.layout.add_widget(self.exec_button)
+		self.exec_button.bind(on_release=handle_exceptions(lambda x: exec(self.exec_input.text, globals(), self.ns)))
+GS.exec_popup = ExecPopup()
+
+from kivy.core.image import ImageData
+import tempfile
 class ToolTip(DropDown):
 	@handle_exceptions
-	def __init__(self, associated_widget, **kwargs):
+	def __init__(self, associated_widget, tooltip_text = '', **kwargs):
 		super().__init__(**kwargs)
 		self.associated_widget = associated_widget
-		self.BgLabel = BgLabel(text="Test", size_hint_y=1, register_to = GS.registered_tooltiplabels,
-		initial_text_color = GS.THEME["TTText"]["value"], initial_bg_color = GS.THEME["TTBg"]["value"])
+		self.bglabel = BgLabel(text='', size_hint_y=1, register_to = GS.registered_tooltiplabels,
+		initial_text_color = GS.theme["TTText"]["value"], initial_bg_color = GS.theme["TTBg"]["value"])
 		self.bubble = Bubble(size_hint_y=None)
-		self.bubble.arrow_color = GS.THEME["BgLBg"]["value"]
+		self.bubble.arrow_color = GS.theme["BgLBg"]["value"]
 		self.add_widget(self.bubble)
-		self.bubble.add_widget(self.BgLabel)
-		self.offset=0 # Needed because right now tooltips always start in a glitched state and work on every attempt after that
+		self.bubble.add_widget(self.bglabel)
+		
+		custom_arrow_image = self.create_custom_arrow((1, 0, 0, 1))  # Red arrow
+		self.bubble.arrow_image = custom_arrow_image
+
+	@handle_exceptions
+	def create_custom_arrow(self, color):
+		# Define the arrow size and color
+		arrow_size = (40, 40)
+		arrow_color = color  # RGBA color tuple
+
+		# Create a new image with the arrow size
+		img = PILImage.new('RGBA', arrow_size, color=(0, 0, 0, 0))
+		draw = PILImageDraw.Draw(img)
+
+		fill_color = (int(arrow_color[0] * 255), int(arrow_color[1] * 255), int(arrow_color[2] * 255), int(arrow_color[3] * 255))
+		# Draw a triangle (the arrow) on the image
+		draw.polygon([(0, arrow_size[1] - 1),
+					  (arrow_size[0] // 2, 0),
+					  (arrow_size[0], arrow_size[1] - 1)],
+					 fill=arrow_color)
+
+		# Save the image to a file
+		img.save('custom_arrow.png')
+
+		# Return the path to the temporary file
+		return 'custom_arrow.png'
+
 
 	@handle_exceptions
 	def open(self, instance):
-		return
+		if self.bglabel.text == '':
+			return
+		# First we open this like a normal dropdown
+		super().open(instance)
+		# Then we need to let Kivy finish all the positioning so we can properly set the arrow position
+		EventLoop.idle()
 
 		tip_pos = self.to_window(*self.pos)
 		widget_pos = self.associated_widget.to_window(*self.associated_widget.pos)
@@ -1411,10 +1543,12 @@ class ToolTip(DropDown):
 		# Calculate center of widget
 		widget_center_x = int(widget_pos[0] + self.associated_widget.width / 2)
 		# Set arrow_x to that center
-		arrow_x = widget_center_x - tip_pos[0] + self.offset
+		arrow_x = widget_center_x - tip_pos[0]
 
 		self.bubble.flex_arrow_pos = [arrow_x, arrow_y]
-		self.offset+=0.1
+		#self.bglabel.text = str(self.bubble.flex_arrow_pos)
+		#self.bglabel.text += '\n' + str(self.bubble.arrow_image)
+		self.bubble.arrow_color = GS.theme["BgLBg"]["value"]
 
 ### Add decorators once done!
 # Similar to the InjectorDropDown this class provides a single button and attached dropdown system, used to handle saved images

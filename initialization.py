@@ -10,7 +10,7 @@ initialization.py
 			This is a decorator function used to wrap just about any and every function outside of the Kivy main thread, no matter what it is
 			Its purpose is to prevent any and all silent crashes, make the program maximally robust and report all errors both in the console as well as the app
 			Functions that get this wrapper do not halt the program and use traceback to report issues visibly both in the attached terminal and the console in the app
-			The wrapper also saves the last error message to GS.LAST_ERROR, making it available for quick copying in the UI
+			The wrapper also saves the last error message to GS.last_error, making it available for quick copying in the UI
 03.	load_fonts
 			This function is responsible for loading in all the default and possibly user defined prompts
 			Because of the importance of these fonts, the program can't properly start without these
@@ -25,6 +25,7 @@ import functools
 import time
 from PIL import ImageFont
 from kivy.event import EventDispatcher
+from kivy.properties import NumericProperty
 
 # Fetch the current running dir
 if getattr(sys, 'frozen', False):
@@ -37,33 +38,34 @@ else:
 # 1. The big singleton class to be employed whenever any global state or variable is needed
 class GlobalState(EventDispatcher):
 	_instance = None
+	queued_images = NumericProperty(0)
+	produced_images = NumericProperty(0)
+	skipped_images = NumericProperty(0)
+	queued_tasks = NumericProperty(0)
+	finished_tasks = NumericProperty(0)
+	skipped_tasks = NumericProperty(0)
+
 	def __new__(cls):
 		if cls._instance is None:
 			cls._instance = super().__new__(cls)
-			cls._instance.main_app = None
+			cls._instance.VERSION = 5.3
+			cls._instance.MAIN_APP = None
 			cls._instance.FULL_DIR = full_dir
-			cls._instance.WAIT_TIME = 1
-			cls._instance.PRODUCED_IMAGES = 0
-			cls._instance.SKIPPED_IMAGES = 0
-			cls._instance.QUEUED_IMAGES = 0
-			cls._instance.PROCESSING_QUEUE = deque()
-			cls._instance.PROCESSING_QUEUE_LEN = 0
-			cls._instance.FINISHED_TASKS = 0
-			cls._instance.SKIPPED_TASKS = 0
-			cls._instance.WAITS_SHORT = 0
-			cls._instance.WAITS_LONG = 0
 			cls._instance.EXECUTOR = ThreadPoolExecutor()
-			cls._instance.FUTURES = []
-			cls._instance.CANCEL_REQUEST = False
-			cls._instance.PAUSE_REQUEST = False
-			cls._instance.OVERWRITE_IMAGES = False
-			cls._instance.GENERATE_IMAGES = True
-			cls._instance.LAST_ERROR = None
-			cls._instance.LAST_TASK_REPORT = time.time()
-			cls._instance.LAST_SEED = ''
-			cls._instance.PRE_LAST_SEED = ''
-			cls._instance.PREVIEW_QUEUE = []
-			cls._instance.THEME = None
+			
+			cls._instance.theme = None
+			cls._instance.futures = []
+			cls._instance.wait_time = 1
+			cls._instance.processing_queue = deque()
+			cls._instance.cancel_request = False
+			cls._instance.pause_request = False
+			cls._instance.overwrite_images = False
+			cls._instance.generate_images = True
+			cls._instance.last_error = None
+			cls._instance.last_task_report = time.time()
+			cls._instance.last_seed = ''
+			cls._instance.pre_last_seed = ''
+			cls._instance.preview_queue = []
 			cls._instance.registered_text_inputs = []
 			cls._instance.registered_menu_buttons = []
 			cls._instance.registered_dropdown_buttons = []
@@ -71,9 +73,9 @@ class GlobalState(EventDispatcher):
 			cls._instance.registered_labels = []
 			cls._instance.registered_bglabels = []
 			cls._instance.registered_tooltiplabels =  []
-			
-			cls._instance.SKIP = 0
-			cls._instance.END = False
+			cls._instance.verbose =  False
+			cls._instance.skip = 0
+			cls._instance.end = False
 		return cls._instance
 GS = GlobalState()
 
@@ -85,7 +87,7 @@ def handle_exceptions(func):
 			return func(*args, **kwargs)
 		except:
 			traceback.print_exc()
-			GS.LAST_ERROR = traceback.format_exc()
+			GS.last_error = traceback.format_exc()
 	return wrapper
 
 # The config handler must be imported at this later point since it loads values into the GlobalState and like all modules uses @handle_exceptions
@@ -111,10 +113,27 @@ def load_fonts():
 			full_dir + 'Fonts/unifont_jp-15.0.01.ttf',
 		] + GS.CUSTOM_FONT_LIST_APPEND
 		GS.FONT_OBJS = [ImageFont.truetype(str(x), GS.FONT_SIZE) for x in font_list]
-		GS.TT_FONTS = [TTFont(x) for x in font_list]
+#		GS.TT_FONTS = [TTFont(x) for x in font_list]
+
+		cached_fonts = []
+		for font_path in font_list:
+			try:
+				font = TTFont(font_path)
+				cmap = font.getBestCmap()
+				cached_font = {
+					'font_obj': ImageFont.truetype(str(font_path), GS.FONT_SIZE),
+					'font': font,
+					'cmap': cmap
+				}
+				cached_fonts.append(cached_font)
+			except Exception as e:
+				print(f"Error loading font {font_path}: {e}")
+
+		GS.CACHED_FONTS = cached_fonts
+		GS.FONT_LIST = font_list
 	except:
 		traceback.print_exc()
 		print(f'Loading fonts failed. Is the Fonts folder or any of the default/custom specified fonts missing? FONT_LIST: {font_list}')
 		sys.exit()
-	GS.FONT_LIST = font_list
+
 load_fonts()

@@ -1,7 +1,7 @@
 """
 config_handler.py
 	This module is responsible for handling all configuration files
-	It writes, loads (and in the future updates) configuration files
+	It writes, loads and updates configuration files
 """
 
 import os
@@ -15,10 +15,6 @@ FALLBACK_CONFIG = {
 	'1.User_Settings':
 """#Video settings
 BASE_FPS = 7
-#If Flowframes is used and the path is different it has to go here.
-FLOWFRAMES_PATH = ''
-FF_FACTOR = 4
-FF_OUTPUT_MODE = 2
 
 #Settings for cluster collages
 CREATOR_NAME = ''
@@ -74,69 +70,87 @@ USER_UCS = [
 ]
 """,
 	'2.NAID_Constants':
-"""#The URL to which the requests are sent
-URL='https://api.novelai.net/ai/generate-image'
-URL_ANNOTATE='https://api.novelai.net/ai/annotate-image'
+f"""#The URL to which the requests are sent
+NAID_CONST_VERSION = {GS.VERSION}
+URL='https://image.novelai.net/ai/generate-image'
+URL_ANNOTATE='https://image.novelai.net/ai/annotate-image'
 #This is a list reflecting the online UI UC presets of NAI
 NAI_UCS=[
-{'name': 'Full: Low Quality+Bad Anatomy', 'string': 'nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry, '},
-{'name': 'Full: Low Quality', 'string': 'nsfw, lowres, text, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry, '},
+{{'name': 'Full: Low Quality+Bad Anatomy', 'string': 'nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry, '}},
+{{'name': 'Full: Low Quality', 'string': 'nsfw, lowres, text, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry, '}},
 
-{'name': 'Furry: Low Quality', 'string': 'nsfw, worst quality, low quality, what has science done, what, nightmare fuel, eldritch horror, where is your god now, why, '},
-{'name': 'Furry: Bad Anatomy', 'string': 'nsfw, {worst quality}, low quality, distracting watermark, [nightmare fuel], {{unfinished}}, deformed, outline, pattern, simple background, '}
+{{'name': 'Furry: Low Quality', 'string': 'nsfw, worst quality, low quality, what has science done, what, nightmare fuel, eldritch horror, where is your god now, why, '}},
+{{'name': 'Furry: Bad Anatomy', 'string': 'nsfw, {{worst quality}}, low quality, distracting watermark, [nightmare fuel], {{{{unfinished}}}}, deformed, outline, pattern, simple background, '}}
 ]
 
 #This is the list of available NAI samplers
 NAI_SAMPLERS_RAW=['k_dpmpp_2m', 'k_euler_ancestral', 'k_heun', 'k_euler', 'k_dpm_2', 'k_dpm_2_ancestral', 'k_dpmpp_2s_ancestral', 'k_dpmpp_sde', 'k_dpm_fast', 'k_dpm_adaptive', 'ddim', 'k_lms',]
 NAI_SAMPLERS=[
-{'name': 'DPM++ 2M | Converging', 'string': 'k_dpmpp_2m, '},
-{'name': 'Euler Ancestral | Diverging', 'string': 'k_euler_ancestral, '},
-{'name': 'Heun', 'string': 'k_heun, '},
-{'name': 'Euler', 'string': 'k_euler, '},
-{'name': 'DPM2', 'string': 'k_dpm_2, '},
-{'name': 'DPM2 Ancestral', 'string': 'k_dpm_2_ancestral, '},
-{'name': 'DPM++ 2S Ancestral', 'string': 'k_dpmpp_2s_ancestral, '},
-{'name': 'DPM++ SDE', 'string': 'k_dpmpp_sde, '},
-{'name': 'DPM Fast', 'string': 'k_dpm_fast, '},
-{'name': 'DPM Adaptive', 'string': 'k_dpm_adaptive, '},
-{'name': 'DDIM', 'string': 'ddim, '},
-{'name': 'K-LMS | Deprecated, inefficient, glitchy', 'string': 'k_lms, '},
+{{'name': 'DPM++ 2M | Converging', 'string': 'k_dpmpp_2m, '}},
+{{'name': 'Euler Ancestral | Diverging', 'string': 'k_euler_ancestral, '}},
+{{'name': 'Heun', 'string': 'k_heun, '}},
+{{'name': 'Euler', 'string': 'k_euler, '}},
+{{'name': 'DPM2', 'string': 'k_dpm_2, '}},
+{{'name': 'DPM2 Ancestral', 'string': 'k_dpm_2_ancestral, '}},
+{{'name': 'DPM++ 2S Ancestral', 'string': 'k_dpmpp_2s_ancestral, '}},
+{{'name': 'DPM++ SDE', 'string': 'k_dpmpp_sde, '}},
+{{'name': 'DPM Fast', 'string': 'k_dpm_fast, '}},
+{{'name': 'DPM Adaptive', 'string': 'k_dpm_adaptive, '}},
+{{'name': 'DDIM', 'string': 'ddim, '}},
+{{'name': 'K-LMS | Deprecated, inefficient, glitchy', 'string': 'k_lms, '}},
 ]
+
+NAI_NOISE_SCHEDULERS=['default','native','karras','exponential','polyexponential']
+NAI_DEFAULT_NOISE_SCHEDULERS={{
+'k_dpmpp_2m': 'exponential',
+'k_euler_ancestral': 'native',
+'k_heun': 'exponential',
+'k_euler': 'native',
+'k_dpm_2': 'native',
+'k_dpm_2_ancestral': 'native',
+'k_dpmpp_2s_ancestral': 'native',
+'k_dpmpp_sde': 'exponential',
+'k_dpm_fast': 'native',
+'k_dpm_adaptive': 'native',
+'ddim': None,
+'ddim_v3': None,
+'k_lms': 'karras',
+}}
 
 #NAID uses these two vectors as standard quality tags
 NAI_PROMPT_CHUNKS=[
-{'name': 'NAI Quality Tags', 'string': 'masterpiece, best quality, '},
+{{'name': 'NAI Quality Tags', 'string': 'masterpiece, best quality, '}},
 ]
 
 #These are the names used to address certain models
-NAI_MODELS={
+NAI_MODELS={{
 'NAI Anime Full V3':'nai-diffusion-3',
 'NAI Anime Full V2':'nai-diffusion-2',
 'NAI Furry':'nai-diffusion-furry',
 'NAI Curated':'safe-diffusion',
-'NAI Anime Full V1':'nai-diffusion',}
+'NAI Anime Full V1':'nai-diffusion',}}
 
-NAI_RESOLUTIONS={
-	'Small':{
-		'PortraitSmall': {'width':512, 'height':768},
-		'LandscapeSmall': {'width':768, 'height':512},
-		'SquareSmall':	 {'width':640, 'height':640,},
-	},
-	'Normal':{
-		'PortraitNormal': {'width':832, 'height':1216},
-		'LandscapeNormal': {'width':1216,'height':832},
-		'SquareNormal': {'width':1024,'height':1024},
-	},
-	'Large':{
-		'PortraitLarge': {'width':1024, 'height':1536},
-		'LandscapeLarge': {'width':1536,'height':1024},
-		'SquareLarge': {'width':1472,'height':1472},
-	},
-	'Landscape':{
-		'LandscapeWallpaper': {'width':1920,'height':1088},
-		'PortraitWallpaper': {'width':1088,'height':1920},
-	},
-}""",
+NAI_RESOLUTIONS={{
+	'Small':{{
+		'PortraitSmall': {{'width':512, 'height':768}},
+		'LandscapeSmall': {{'width':768, 'height':512}},
+		'SquareSmall':	 {{'width':640, 'height':640,}},
+	}},
+	'Normal':{{
+		'PortraitNormal': {{'width':832, 'height':1216}},
+		'LandscapeNormal': {{'width':1216,'height':832}},
+		'SquareNormal': {{'width':1024,'height':1024}},
+	}},
+	'Large':{{
+		'PortraitLarge': {{'width':1024, 'height':1536}},
+		'LandscapeLarge': {{'width':1536,'height':1024}},
+		'SquareLarge': {{'width':1472,'height':1472}},
+	}},
+	'Landscape':{{
+		'LandscapeWallpaper': {{'width':1920,'height':1088}},
+		'PortraitWallpaper': {{'width':1088,'height':1920}},
+	}},
+}}""",
 	'3.Token(DO NOT SHARE)':
 """#Only the access token goes into this file. Do not share it with anyone else as that's against NAI ToS. Using it on multiple of your own devices is fine.
 AUTH=''
@@ -362,14 +376,18 @@ for file in FILES_TO_MOVE:
 # A simple config writing function that can either just take the name of the missing config file to write from the fallback, or a full location/content input
 # Uses UTF-16 so there's as little problem as possible when using the deep variety of symbols SD in its different forms can make use of
 @handle_exceptions
-def write_config_file(config_name, content=None):
+def write_config_file(config_name, content=None, load = False):
 	if content: 
 		with open(config_name, "w", encoding="utf-16") as f:
-			f.write(content) 
+			f.write(content)
+		if load:
+			load_config(content, direct_mode = True)
 	else:
 		config_path = CONFIG_FILES.get(config_name)
 		with open(config_path, "w", encoding="utf-16") as f:
-		   f.write(FALLBACK_CONFIG[config_name])
+			f.write(FALLBACK_CONFIG[config_name])
+		if load:
+			load_config(config_path)
 
 # Simple function to recursively update and overwrite dicts without breaking references
 @handle_exceptions
@@ -399,9 +417,13 @@ def load_config(config, direct_mode = False):
 				value = ast.literal_eval(node.value)
 				config_dict[target_name] = value
 		for key, value in config_dict.items():
+			if key == 'THEME':
+				key = 'theme'
 			existing_value = getattr(GS, key, None)
+			#if key == 'theme' and existing_value != None:
+			#	GS.old_console_colors = [existing_value["ConNorm"]["value"], existing_value["ConWarn"]["value"], existing_value["ConErr"]["value"]]
 			if existing_value and isinstance(existing_value, dict):
-				merged_value = merge_dicts(existing_value, value)
+				setattr(GS, key, merge_dicts(existing_value, value))
 			else:
 				setattr(GS, key, value)
 	except Exception as e:
@@ -413,10 +435,18 @@ def load_config(config, direct_mode = False):
 load_config(FALLBACK_CONFIG["Theme"], direct_mode = True)
 for name, path in CONFIG_FILES.items():
 	if not os.path.exists(path):
-		print(f"{name} config not found at {path}, writing default...")
-		write_config_file(name) # using default configs
+		print(f"{name} config not found at {path}, writing default...") ### Messages like these should probably be printed delayed so they appear in the application
+		write_config_file(name, load = True) # using default configs
 	else:  
 		load_config(path) #load located config file
+
+# Make sure that the NAID constants file is up to date
+if getattr(GS, 'NAID_CONST_VERSION', None) == None:
+	write_config_file("2.NAID_Constants", load = True)
+elif GS.NAID_CONST_VERSION < GS.VERSION:
+	write_config_file("2.NAID_Constants", load = True)
+	
+# This loop ensures that default theme files are always present
 for name, content in THEMES.items():
 	if not os.path.exists(os.path.join(GS.THEMES_DIR, f"{name}.py")):
 		write_config_file(os.path.join(GS.THEMES_DIR, f"{name}.py"), content)

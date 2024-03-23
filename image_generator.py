@@ -74,6 +74,9 @@ def form_prompt(settings,number=1,noise=0.1,strength=0.4):
 	elif settings["dynamic_thresholding_percentile"] > 1:
 		settings["dynamic_thresholding_percentile"] = 1
 		print("[Warning] Dynamic thresholding percentile too high, adjusting to 1, check your settings")
+	if not settings["dynamic_thresholding"]:
+		settings["dynamic_thresholding_mimic_scale"] = 10
+		settings["dynamic_thresholding_percentile"] = 0.999
 	json_construct={
 		#This is the prompt, Quality Tags are not configured separately and net to be appended here manually
 		'input': settings["prompt"],
@@ -81,7 +84,7 @@ def form_prompt(settings,number=1,noise=0.1,strength=0.4):
 		'model': settings["model"],															
 		'parameters': {
 			#Seed as in UI
-			'seed': settings["seed"],
+			'seed': int(settings["seed"]),
 			#Undesired Content as in UI
 			'negative_prompt': settings["negative_prompt"],
 			#Image Width as in UI
@@ -92,6 +95,8 @@ def form_prompt(settings,number=1,noise=0.1,strength=0.4):
 			'n_samples': number,
 			#Sampler as in UI
 			'sampler': settings["sampler"],
+			#Noise Schedule as in UI
+			'noise_schedule': settings["noise_schedule"],
 			#Guidance as in UI
 			'scale': settings["scale"],
 			#Prompt Guidance Rescale as in UI
@@ -110,7 +115,8 @@ def form_prompt(settings,number=1,noise=0.1,strength=0.4):
 			'dynamic_thresholding_mimic_scale': settings["dynamic_thresholding_mimic_scale"],
 			'dynamic_thresholding_percentile': settings["dynamic_thresholding_percentile"],
 			'quality toggle': False,
-			'uncond_scale': float(settings["negative_prompt_strength"])/100
+			'uncond_scale': float(settings["negative_prompt_strength"])/100,
+			'legacy_v3_extend': False,
 			}
 		}
 	return [json_construct,settings["name"]]
@@ -121,23 +127,24 @@ def form_prompt(settings,number=1,noise=0.1,strength=0.4):
 def image_gen(auth,prompt,filepath,enumerator,token_test=False):
 	skipped = False
 	retry_time=5
-	while GS.GENERATE_IMAGES:
-		if GS.CANCEL_REQUEST:
+	while GS.generate_images:
+		if GS.cancel_request:
 			print('Image generation cancelled')
 			return
-		while GS.PAUSE_REQUEST:
+		while GS.pause_request:
 			time.sleep(0.2)
 		api_header=f'Bearer {auth}'
-		if not GS.OVERWRITE_IMAGES and not token_test:
+		if not GS.overwrite_images and not token_test:
 			if os.path.isfile(filepath):
 				print(f'[Warning] {filepath} is already present and has not been overwritten')
 				skipped = True
 				break
 		response = None
 		try:
-			print(prompt)
-			print(f'''{enumerator}\nDecrisp: {prompt[0]["parameters"]["dynamic_thresholding"]}{" | MS: " + str(prompt[0]["parameters"]["dynamic_thresholding_mimic_scale"]) + " | " + str(prompt[0]["parameters"]["dynamic_thresholding_percentile"]) + "%ile" if prompt[0]["parameters"]["dynamic_thresholding"] else ""}''')
-			print(f'''Model: {prompt[0]["model"]}\nPrompt:\n{prompt[0]["input"]}\nUC:\n{prompt[0]["parameters"]["negative_prompt"]}''')
+			if True:
+				print(prompt)
+				print(f'''{enumerator}\nDecrisp: {prompt[0]["parameters"]["dynamic_thresholding"]}{" | MS: " + str(prompt[0]["parameters"]["dynamic_thresholding_mimic_scale"]) + " | " + str(prompt[0]["parameters"]["dynamic_thresholding_percentile"]) + "%ile" if prompt[0]["parameters"]["dynamic_thresholding"] else ""}''')
+				print(f'''Model: {prompt[0]["model"]}\nPrompt:\n{prompt[0]["input"]}\nUC:\n{prompt[0]["parameters"]["negative_prompt"]}''')
 
 			start=time.time()
 			response=requests.post(GS.URL,json.dumps(prompt[0]),headers={'Authorization': api_header,'Content-Type': 'application/json','accept': 'application/json',})
@@ -148,19 +155,19 @@ def image_gen(auth,prompt,filepath,enumerator,token_test=False):
 				if response.status_code == 200:
 					return 'Success'
 				else:
-					try: # This try/except block only serves the singular purpose to prevent the program from ever getting stuck here and possibly accidentally DDoSing the server
-						return GS.error_popup.show_generation_error(response)
-					except:
-						return 'Error'
+					return 'Error'
 			
 			
 			if response.status_code == 400 or response.status_code == 401:
-				print(f'Invalid access token. Please fetch your token from the website.', file=sys.stderr)
+				print(f'[Warning] {response.status_code} | Server message: {json.loads(response.content)["message"]}')
 				return 'Error'
+			elif response.status_code == 429:
+				raise ValueError('Server refused to respond with an image due to concurrent generation.')
 			elif response.status_code >= 402 and response.status_code < 500:
-				GS.error_popup.show_generation_error(response)
+				print(f'[Warning] {response.status_code} | Server message: {json.loads(response.content)["message"]}')
 				return 'Error'
-			elif response.status_code > 500:
+			elif response.status_code >= 500:
+				print(f'[Warning] {response.status_code} | Server message: {json.loads(response.content)["message"]}')
 				raise ValueError('Server failed to respond with an image.')
 
 			with zipfile.ZipFile(io.BytesIO(response.content), "r") as zip_file:
@@ -168,32 +175,36 @@ def image_gen(auth,prompt,filepath,enumerator,token_test=False):
 					if file_name.endswith(".png"):
 						with zip_file.open(file_name) as png_file:
 							image_data = png_file.read()
-							GS.PREVIEW_QUEUE.append(image_data)
+							GS.preview_queue.append(image_data)
 							with open(filepath, 'wb+') as t:
 								t.write(image_data)
 							t.close()
 			break
 		except:
+			traceback.print_exc() if GS.verbose else None
 			if response == None:
 				print(f'[Warning] Failed to get any server response')
 			elif response.status_code >= 500:
-				print(f'[Warning] {response.status_code} | Server message: {json.loads(response.content)["message"]}')
+				try:
+					print(f'[Warning] {response.status_code} | Server message: {json.loads(response.content)["message"]}')
+				except:
+					print(f'[Warning] {response.status_code} | No proper server message received')
 			else:
-				traceback.print_exc()
+				None if GS.verbose else traceback.print_exc()
 			print(f'[Warning] Creation error encounted. Retrying after: {min(retry_time,15)}s')
 			for i in range(min(retry_time,15)):
 				time.sleep(1)
-				if GS.CANCEL_REQUEST: break
+				if GS.cancel_request: break
 			retry_time+=5
 			continue
-		time.sleep(GS.WAIT_TIME) # Waiting for the specified amount to avoid getting limited
+		time.sleep(GS.wait_time) # Waiting for the specified amount to avoid getting limited
 
-	if not skipped and GS.GENERATE_IMAGES:
-		GS.PRODUCED_IMAGES += 1
+	if not skipped and GS.generate_images:
+		GS.produced_images += 1
 	else:
-		GS.SKIPPED_IMAGES += 1
-	GS.PRE_LAST_SEED = GS.LAST_SEED
-	GS.LAST_SEED = str(prompt[0]['parameters']['seed'])
+		GS.skipped_images += 1
+	GS.pre_last_seed = GS.last_seed
+	GS.last_seed = str(prompt[0]['parameters']['seed'])
 	return filepath
 
 # 3. Function to generate seeds in the way NAI would
@@ -255,7 +266,7 @@ def make_vid(vid_params, vid_path, img_futures, num_frames, base_path='__0utput_
 	# Write remaining frames to video
 	for _ in range(num_frames - 1):
 		img = img_futures.get()
-		if GS.CANCEL_REQUEST:
+		if GS.cancel_request:
 			del img
 			print('Video processing cancelled')
 			writer.close()
@@ -329,30 +340,10 @@ def handle_img(img):
         return img.result()
         
 def print_status(vid_path):
-
     if os.path.exists(vid_path):
         print("Video created")
     else: 
-        print("Failed")
-
-# Calls flowframes to interpolate an existing video, will run in parallel
-@handle_exceptions
-def interpolate_vid(vid_path,factor=4,output_mode=2,base_path='__0utput__/'):
-	vid_path=TM.replace_forbidden_symbols(vid_path)
-	SW_MINIMIZE = 6
-	info = subprocess.STARTUPINFO()
-	info.dwFlags = subprocess.STARTF_USESHOWWINDOW
-	info.wShowWindow = SW_MINIMIZE
-	path=f'{os.getcwd()}/{base_path+vid_path}/{vid_path}.webm'
-	p = subprocess.Popen([GS.FLOWFRAMES_PATH,path,'-start','-quit-when-done',
-	f'-factor={factor}',f'-output-mode={output_mode}'],startupinfo=info)
-	print("Interpolating video in Flowframes")
-
-# Simply combines the above functions into a single call
-@handle_exceptions
-def make_interpolated_vid(vid_path,fps=7,factor=4,output_mode=2,base_path='__0utput__/'):
-	make_vid(vid_path,fps,base_path)
-	interpolate_vid(vid_path,factor,output_mode,base_path)
+        print("[Warning] Video creation failed")
 
 # 5. Takes in a list of images and turns them into a collage
 @handle_exceptions
@@ -395,12 +386,12 @@ def attach_metadata_header(img_collages,settings,name_extra, cc=''):
 	line_height=GS.FONT_SIZE+5
 	font=ImageFont.truetype(GS.FONT_LIST[0],GS.FONT_SIZE)
 	left_meta_block=900
-	
+
 	#Creating the header
 	starting_amount_lines = 9
 	img_header = Image.new("RGB", (img_collages.width, line_height*starting_amount_lines), (0, 0, 0))
 	draw = ImageDraw.Draw(img_header)
-	
+
 	#Draw the basic metadata on the left side
 	draw.text((10,line_height*0),f"ClusterVisionF"+cc,font=font,fill=(255,220,255,0))
 	draw.text((10,line_height*1),f'Creator: {GS.CREATOR_NAME}',font=font,fill=(200,200,255,0))
@@ -422,46 +413,53 @@ def attach_metadata_header(img_collages,settings,name_extra, cc=''):
 	draw.text((10,line_height*(2+used_lines_name)),f'NovelAI Model: {model}',font=font,fill=(255,255,255,0))
 	draw.text((10,line_height*(3+used_lines_name)),f'Resolution: {settings["img_mode"]}',font=font,fill=(255,255,255,0))
 	currently_used_lines=4+used_lines_name
-	
+
 	# Steps, using the FFW to linebreak at |
 	available_lines = starting_amount_lines - currently_used_lines
 	steps = settings["steps"]
-	steps_string = 'Steps: ' + (steps if isinstance(steps, str) and "⁅" in steps else '|'.join(str(s) for s in settings["meta"]["steps"]))
+	#steps_string = 'Steps: ' + (steps if isinstance(steps, str) and "⁅" in steps else '|'.join(str(s) for s in settings["meta"]["steps"]))
+	if (isinstance(steps, str) and "⁅" in steps) or type(steps) != list:
+		steps_string = 'Steps: ' + str(steps)
+	elif len(settings["meta"]["steps"]) > 1:
+		steps_string = 'Steps: ' + str(settings["meta"]["steps"][0]) + '→' + str(settings["meta"]["steps"][-1])
+	else:
+		steps_string = 'Steps: ' + str(settings["meta"]["steps"][0])
 	draw, img_header, used_lines_steps=TM.fallback_font_writer(draw, img_header, steps_string, 10,
 		line_height*currently_used_lines, left_meta_block, available_lines, line_height, (255,255,255,0), break_symbol = '|')
 	currently_used_lines=currently_used_lines+used_lines_steps
-	
+
 	# Guidance, using the FFW to linebreak at |
 	available_lines = available_lines - used_lines_steps
 	scale = settings["scale"]
-	guidance_string = 'Scale: ' + (scale if isinstance(scale, str) and "⁅" in scale else '|'.join(str(s) for s in settings["meta"]["scale"]))
+	if (isinstance(scale, str) and "⁅" in scale) or type(scale) != list:
+		guidance_string = 'Scale: ' + str(scale)
+	elif len(settings["meta"]["scale"]) > 1:
+		guidance_string = 'Scale: ' + str(settings["meta"]["scale"][0]) + '→' + str(settings["meta"]["scale"][-1])
+	else:
+		guidance_string = 'Scale: ' + str(settings["meta"]["scale"][0])
 	draw, img_header, used_lines_scale=TM.fallback_font_writer(draw, img_header, guidance_string, 10,
 		line_height*currently_used_lines, left_meta_block, available_lines, line_height, (255,255,255,0), break_symbol = '|')
 	currently_used_lines=currently_used_lines+used_lines_scale
-	
-	# Sampler, using the FFW to linebreak at ,
-	available_lines = available_lines - used_lines_scale
-	draw, img_header, used_lines_samplers=TM.fallback_font_writer(draw, img_header, 'Sampler: '+', '.join(settings["sampler"][0]), 10,
-		line_height*currently_used_lines, left_meta_block, available_lines, line_height, (255,255,255,0), break_symbol = ',')
-	currently_used_lines=currently_used_lines+used_lines_samplers
-	
+
+	# The sampler string has been migrated to the same place the seed is on, the individual clusters
+
 	# Decrisper
 	decrisper_string = 'Decrisper: '
 	if settings["dynamic_thresholding"] == False:
 		decrisper_string += 'Off'
 	else:
 		decrisper_string += f'On | M. Scale: {settings["dynamic_thresholding_mimic_scale"]} | {settings["dynamic_thresholding_percentile"]}%ile'
-	available_lines = available_lines - used_lines_samplers
+	available_lines = available_lines - used_lines_scale
 	draw, img_header, used_lines_decrisper=TM.fallback_font_writer(draw, img_header, decrisper_string, 10,
 		line_height*currently_used_lines, left_meta_block, available_lines, line_height, (255,255,255,0), break_symbol = '|')
 	currently_used_lines=currently_used_lines+used_lines_decrisper
-	
+
 	# Undesired Content Strength
 	available_lines = available_lines - used_lines_decrisper
 	draw, img_header, used_lines_ucs=TM.fallback_font_writer(draw, img_header, 'Undesired Content Strength: '+settings["negative_prompt_strength"]+'%', 10,
 		line_height*currently_used_lines, left_meta_block, available_lines, line_height, (255,255,255,0), break_symbol = ',')
 	currently_used_lines=currently_used_lines+used_lines_ucs
-	
+
 	#Draw the prompt and UC on the right side
 	full_prompt=settings["prompt"]
 	draw, img_header, used_lines_prompt=TM.fallback_font_writer(draw, img_header, full_prompt, left_meta_block, line_height*0, img_collages.size[0]-left_meta_block,
@@ -483,12 +481,11 @@ def attach_metadata_header(img_collages,settings,name_extra, cc=''):
 		path = f'__0utput__/{TM.replace_forbidden_symbols(settings["folder_name"])}/#ClusterCollages{settings["folder_name_user"]}/'
 		os.makedirs(path, exist_ok=True)
 		final_path = f'{path}{TM.replace_forbidden_symbols(settings["name"])}_Collage({TM.replace_forbidden_symbols(name_extra)}).jpg'
-		full_img.save(final_path, quality=90)
 	else:
 		path = f'__0utput__/{TM.replace_forbidden_symbols(settings["folder_name"])}/#ClusterCollages/'
 		os.makedirs(path, exist_ok=True)
 		final_path = path + f'{TM.replace_forbidden_symbols(settings["name"])}_Collage({TM.replace_forbidden_symbols(name_extra)}).jpg'
-		full_img.save(final_path, quality=90)
+	full_img.save(final_path, quality=90)
 	return full_img if cc!='' else None
 
 # ---Rendering Functions---
@@ -501,24 +498,54 @@ def generate_as_is(settings,enumerator,token_test=False,token=''):
 			'steps': 1, 'img_mode': {'width': 64, 'height': 64}, 'prompt': 'Test', 'negative_prompt': 'Test', 'smea': False, 'dyn': False, 'dynamic_thresholding': False,
 			'dynamic_thresholding_mimic_scale': 10, 'dynamic_thresholding_percentile': 0.999, 'uncond_scale': 0.9, 'guidance_rescale': 0, 'negative_prompt_strength': 1}
 		return image_gen(token,form_prompt(settings),'','',token_test=True)
-	final_settings=copy.deepcopy(settings)
-	if settings["sampler"].endswith('_dyn'):
-		final_settings["smea"] = True
-		final_settings["dyn"] = True
-		final_settings["sampler"] = settings["sampler"][:-4]
-	elif settings["sampler"].endswith('_smea'):
-		final_settings["smea"] = True
-		final_settings["dyn"] = False
-		final_settings["sampler"] = settings["sampler"][:-5]
-	else:
-		final_settings["smea"] = False
-		final_settings["dyn"] = False
-	prompt=form_prompt(final_settings)
+	prompt=form_prompt(settings)
 	filepath=TM.make_file_path(prompt,enumerator,settings["folder_name"],settings["folder_name_extra"])
 	return image_gen(GS.AUTH,prompt,filepath,enumerator)
 
+def decode_sampler_string(string, cluster_string = False):
+	sampler_settings={}
+	if string.endswith('_dyn'):
+		sampler_settings["smea"] = True
+		sampler_settings["dyn"] = True
+		sampler_settings["sampler"] = string[:-4]
+		if cluster_string:
+			sd_string = 'SMEA+Dyn, '
+	elif string.endswith('_smea'):
+		sampler_settings["smea"] = True
+		sampler_settings["dyn"] = False
+		sampler_settings["sampler"] = string[:-5]
+		if cluster_string:
+			sd_string = 'SMEA, '
+	else:
+		sampler_settings["smea"] = False
+		sampler_settings["dyn"] = False
+		sampler_settings["sampler"] = string
+		if cluster_string:
+			sd_string = ''
+
+	for noise_schedule in GS.NAI_NOISE_SCHEDULERS:
+		if string.endswith('_' + noise_schedule):
+			sampler_settings["sampler"] = string[:-len(noise_schedule)-1]
+			if noise_schedule == 'default':
+				sampler_settings["noise_schedule"] = GS.NAI_DEFAULT_NOISE_SCHEDULERS[sampler_settings["sampler"]]
+			else:
+				sampler_settings["noise_schedule"] = noise_schedule
+			break
+	if not sampler_settings.get('noise_schedule'):
+		print('[Warning] Failed to determine noise schedule, attempting to fall back to default')
+		sampler_settings["noise_schedule"] = GS.NAI_DEFAULT_NOISE_SCHEDULERS[sampler_settings["sampler"]]
+	
+	if cluster_string:
+		matching_dict = next((d for d in GS.NAI_SAMPLERS if d['string'].strip(', ') == sampler_settings["sampler"]), None)
+		if matching_dict:
+			sampler_string = matching_dict['name']
+		else:
+			sampler_string = sampler_settings["sampler"]
+		sampler_settings["sampler_string"] = f'{sampler_string} ({sd_string}{sampler_settings["noise_schedule"].capitalize()})'
+	return sampler_settings
+
 # 8. Takes a prompt and renders it across multiple seeds at multiple scales, then puts all generations into a cluster collage together with the metadata
-# Does some pre-processing to form a task for a cluster collage, then adds it to the GS.PROCESSING_QUEUE which will be processed with cluster_collage_processor
+# Does some pre-processing to form a task for a cluster collage, then adds it to the GS.processing_queue which will be processed with cluster_collage_processor
 @handle_exceptions
 def cluster_collage(settings,eval_guard=True):
 	#Configures the seed list
@@ -536,7 +563,7 @@ def cluster_collage(settings,eval_guard=True):
 		samplers=len(settings["sampler"][0])
 	settings["meta"]["number_of_seeds"] = len(settings["seed"])*len(settings["seed"][0])
 	settings["meta"]["number_of_imgs"] = settings["meta"]["imgs_per_collage"] = settings["meta"]["imgs_per_subcollage"]*samplers*settings["meta"]["number_of_seeds"]
-	GS.QUEUED_IMAGES+=settings["meta"]["number_of_imgs"]
+	GS.queued_images+=settings["meta"]["number_of_imgs"]
 
 	settings["meta"]["processing_type"]='cluster_collage'
 	if eval_guard:
@@ -559,7 +586,7 @@ def cluster_collage(settings,eval_guard=True):
 		TM.save_settings(conf_settings["folder_name"],settings,sub_folder='/#ClusterCollages')
 	
 	#Finally, add the task and move on
-	GS.PROCESSING_QUEUE.append(settings)
+	GS.processing_queue.append(settings)
 
 # Called by process_task to generate a cluster collage from the settings
 @handle_exceptions
@@ -580,13 +607,12 @@ def cluster_collage_processor(settings, cc='', cs_rendered_imgs=1):
 	
 	#This loop makes the initial collages
 	color=np.array([30,30,30])
-	if not isinstance(settings["sampler"], list):
-		settings["sampler"]=[[settings["sampler"]],1]
+	if type(settings["sampler"]) != list:
+		settings["sampler"]=[[settings["sampler"]], 0]
 		single_sampler=True
-	
 	final_collages=[]
 	for sampler in settings["sampler"][0]:
-		img_settings["sampler"]=sampler
+		img_settings.update(decode_sampler_string(sampler, True))
 		sampler_collage_blocks=[]
 		for seed_sub_list in settings["seed"]:
 			collage_rows=[]
@@ -595,7 +621,7 @@ def cluster_collage_processor(settings, cc='', cs_rendered_imgs=1):
 				n=0
 				for r in range(settings["collage_dimensions"][1]):
 					for c in range(settings["collage_dimensions"][0]):
-						if GS.CANCEL_REQUEST:
+						if GS.cancel_request:
 							return
 						#Load in the correct values for steps, scale and seed
 						steps_guidance_processor(settings,img_settings,{'n':n,'c':c,'r':r,'cc':cc,'s':s})
@@ -611,13 +637,13 @@ def cluster_collage_processor(settings, cc='', cs_rendered_imgs=1):
 								return 'Error'
 						f_variables_processor(settings, img_settings, {'n':n,'c':c,'r':r,'cc':cc,'s':s})
 						#Report the current queue position before rendering
-						if time.time() - GS.LAST_TASK_REPORT >= 1.0: #Limit reports to once a minute to prevent swamping the console
-							GS.LAST_TASK_REPORT = time.time()
-							print(f'Processing task: {GS.FINISHED_TASKS+1+GS.SKIPPED_TASKS}/{GS.PROCESSING_QUEUE_LEN}')
+						if time.time() - GS.last_task_report >= 1.0: # Limit reports to once a second to prevent swamping the console
+							#GS.last_task_report = time.time()
+							print(f'Processing task: {GS.finished_tasks+1+GS.skipped_tasks}/{GS.queued_tasks}')
 							if cc != None: print(f'Rendering img (current cluster collage): {rendered_imgs}/{settings["meta"]["imgs_per_collage"]}')
 							if cc != None: print(f'Rendering img (current CS task): {cs_rendered_imgs}/{settings["meta"]["number_of_imgs"]}')
 							if cc == None: print(f'Rendering img (current CC task): {rendered_imgs}/{settings["meta"]["number_of_imgs"]}')
-							print(f'Rendering img (complete queue): {GS.PRODUCED_IMAGES+1+GS.SKIPPED_IMAGES}/{GS.QUEUED_IMAGES}')
+							print(f'Rendering img (complete queue): {GS.produced_images+1+GS.skipped_images}/{GS.queued_images}')
 						imgs.append(generate_as_is(img_settings,f'(Seed꞉{seed})(n꞉ {n})(r꞉ {r})(c꞉ {c}){cc_enumerator}(Scale꞉{img_settings["scale"]})(Steps꞉{img_settings["steps"]})(Sampler꞉{sampler})'))
 						rendered_imgs += 1
 						if cc != None: cs_rendered_imgs += 1
@@ -631,9 +657,7 @@ def cluster_collage_processor(settings, cc='', cs_rendered_imgs=1):
 				bordered_collage = ImageOps.expand(Image.fromarray(collage), border=(15, 35, 15, 15), fill=(int(color[0]), int(color[1]), int(color[2])))
 				font=ImageFont.truetype(GS.FULL_DIR+GS.CC_SEEDS_FONT[0],GS.CC_SEEDS_FONT[1])
 				draw=ImageDraw.Draw(bordered_collage)
-				collage_metadata=f'{seed}'
-				if not len(settings["sampler"][0]) == 1:
-					collage_metadata += f' | {sampler}'
+				collage_metadata=f'{seed} | {img_settings["sampler_string"]}'
 				draw.text((10,-5),collage_metadata,font=font,fill=(255,255,255,0))
 				color+=[5,5,5]
 				collage_rows.append(bordered_collage)
@@ -643,18 +667,20 @@ def cluster_collage_processor(settings, cc='', cs_rendered_imgs=1):
 	if 'single_sampler' in locals():
 		cluster_collage=make_collage(final_collages,settings["name"],row_length=len(settings["seed"]),passed_image_mode=True,folder_name=settings["folder_name"],pass_image=True)
 	else:
-		if settings["sampler"][1]=='vertical':
+		if settings["sampler"][1] == 'vertical':
 			row_cutoff=1
+		elif type(settings["sampler"][1]) == int:
+			row_cutoff=settings["sampler"][1]
 		else:
-			row_cutoff=settings["meta"]["number_of_seeds"]
+			row_cutoff=10000
 		cluster_collage=make_collage(final_collages,settings["name"],row_length=row_cutoff,passed_image_mode=True,folder_name=settings["folder_name"],pass_image=True)
-	future = GS.EXECUTOR.submit(attach_metadata_header, cluster_collage, settings, f'Cluster{cc_enumerator}[{settings["sampler"][0]}]',f' - cc: {cc}' if cc!='' else '')
-	GS.FUTURES.append(future)
-	GS.FUTURES.append(future)
-	if cc==None: GS.FINISHED_TASKS+=1
+	future = GS.EXECUTOR.submit(attach_metadata_header, cluster_collage, settings, f'Cluster{cc_enumerator}[{img_settings["sampler"]}]',f' - cc: {cc}' if cc!='' else '')
+	GS.futures.append(future)
+	GS.futures.append(future)
+	if cc==None: GS.finished_tasks+=1
 	return future
 
-# 9. Does some pre-processing to form a task for an image sequence, then adds it to the GS.PROCESSING_QUEUE which will be processed with image_sequence_processor
+# 9. Does some pre-processing to form a task for an image sequence, then adds it to the GS.processing_queue which will be processed with image_sequence_processor
 @handle_exceptions
 def image_sequence(settings,eval_guard=True):
 	#Configures the seed
@@ -668,7 +694,7 @@ def image_sequence(settings,eval_guard=True):
 	#Adjusts all needed meta parameters
 	settings["meta"]={}
 	settings["meta"]["number_of_imgs"]=settings["quantity"]
-	GS.QUEUED_IMAGES+=settings["meta"]["number_of_imgs"]
+	GS.queued_images+=settings["meta"]["number_of_imgs"]
 	settings["meta"]["processing_type"]='image_sequence'
 	if eval_guard:
 		settings["meta"]["eval_guard"]=True
@@ -684,7 +710,7 @@ def image_sequence(settings,eval_guard=True):
 		TM.save_settings(settings["folder_name"],settings)
 	settings["meta"]["vid_folder"] = f'{settings["folder_name"]}/#Videos/{settings["name"]}'
 	#Finally, add the task and move on
-	GS.PROCESSING_QUEUE.append(settings)
+	GS.processing_queue.append(settings)
 
 # Called by process_task to generate an image sequence from the settings
 @handle_exceptions
@@ -710,14 +736,11 @@ def image_sequence_processor(settings):
 	if settings["video"] == 'standard':
 		vid = True
 		img_results = Queue()
-		GS.FUTURES.append(GS.EXECUTOR.submit(make_vid, vid_params, settings["meta"]["vid_folder"], img_results, settings["quantity"]))
-	elif settings["video"] == 'interpolated':
-		vid = True
-		img_results = Queue()
-		GS.FUTURES.append(GS.EXECUTOR.submit(make_interpolated_vid, settings["meta"]["vid_folder"], img_results, settings["quantity"], fps=settings["FPS"], factor=FF_FACTOR,output_mode=FF_OUTPUT_MODE))
+		GS.futures.append(GS.EXECUTOR.submit(make_vid, vid_params, settings["meta"]["vid_folder"], img_results, settings["quantity"]))
 
 	for n in range(settings["quantity"]):
-		if GS.CANCEL_REQUEST:
+		img_settings.update(decode_sampler_string(settings["sampler"]))
+		if GS.cancel_request:
 			return
 		steps_guidance_processor(settings, img_settings, {'n':n})
 		enumerator=f'''({img_settings["seed"]})(#{str((n+1)).rjust(4,'0')})'''
@@ -732,19 +755,19 @@ def image_sequence_processor(settings):
 			img_settings["negative_prompt"] = TM.f_string_processor(settings["negative_prompt"],settings["meta"]["eval_guard"],{'n':n})
 			if 'Error' == img_settings["negative_prompt"]:
 				return 'Error'
-		if time.time() - GS.LAST_TASK_REPORT >= 1.0: #Limit reports to once a minute to prevent swamping the console
-			GS.LAST_TASK_REPORT = time.time()
-			print(f'Processing task: {GS.FINISHED_TASKS+1+GS.SKIPPED_TASKS}/{GS.PROCESSING_QUEUE_LEN}')
+		if time.time() - GS.last_task_report >= 1.0: # Limit reports to once a second to prevent swamping the console
+			GS.last_task_report = time.time()
+			print(f'Processing task: {GS.finished_tasks+1+GS.skipped_tasks}/{GS.queued_tasks}')
 			print(f'Rendering img (current IS task): {rendered_imgs}/{settings["meta"]["number_of_imgs"]}')
-			print(f'Rendering img (complete queue): {GS.PRODUCED_IMAGES+1+GS.SKIPPED_IMAGES}/{GS.QUEUED_IMAGES}')
+			print(f'Rendering img (complete queue): {GS.produced_images+1+GS.skipped_images}/{GS.queued_images}')
 		if vid:
 			img_results.put(generate_as_is(img_settings,enumerator))
 		else:
 			generate_as_is(img_settings,enumerator)
 		rendered_imgs+=1
-	GS.FINISHED_TASKS+=1
+	GS.finished_tasks+=1
 
-# 10. Does some pre-processing to form a task for an cluster sequence, then adds it to the GS.PROCESSING_QUEUE which will be processed with cluster_sequence_processor
+# 10. Does some pre-processing to form a task for a cluster sequence, then adds it to the GS.processing_queue which will be processed with cluster_sequence_processor
 @handle_exceptions
 def cluster_sequence(settings,eval_guard=True):
 	#Configures the seed list
@@ -762,7 +785,7 @@ def cluster_sequence(settings,eval_guard=True):
 	settings["meta"]["number_of_seeds"] = len(settings["seed"])*len(settings["seed"][0])
 	settings["meta"]["imgs_per_collage"] = settings["meta"]["imgs_per_subcollage"]*samplers*settings["meta"]["number_of_seeds"]
 	settings["meta"]["number_of_imgs"] = settings["meta"]["imgs_per_collage"]*settings["quantity"]
-	GS.QUEUED_IMAGES += settings["meta"]["number_of_imgs"]
+	GS.queued_images += settings["meta"]["number_of_imgs"]
 	settings["meta"]["processing_type"]='cluster_sequence'
 	if eval_guard:
 		settings["meta"]["eval_guard"]=True
@@ -778,7 +801,7 @@ def cluster_sequence(settings,eval_guard=True):
 		TM.save_settings(settings["folder_name"],settings)
 	settings["meta"]["vid_folder"] = f'{settings["folder_name"]}/#Videos/{settings["name"]}'
 	#Finally, add the task and move on
-	GS.PROCESSING_QUEUE.append(settings)
+	GS.processing_queue.append(settings)
 
 # Called by process_task to generate a cluster sequence (a sequence of cluster collages) from the settings
 @handle_exceptions
@@ -796,17 +819,13 @@ def cluster_sequence_processor(settings):
 	if settings["video"] == 'standard':
 		vid = True
 		img_results = Queue()
-		GS.FUTURES.append(GS.EXECUTOR.submit(make_vid, vid_params, settings["meta"]["vid_folder"], img_results, settings["quantity"]))
-	elif settings["video"] == 'interpolated':
-		vid = True
-		img_results = Queue()
-		GS.FUTURES.append(GS.EXECUTOR.submit(make_interpolated_vid, vid_params, settings["meta"]["vid_folder"], img_results, settings["quantity"], factor=FF_FACTOR,output_mode=FF_OUTPUT_MODE))
+		GS.futures.append(GS.EXECUTOR.submit(make_vid, vid_params, settings["meta"]["vid_folder"], img_results, settings["quantity"]))
 	for cc in range(settings["quantity"]):
 		if vid:
 			img_results.put(cluster_collage_processor(settings, cc, 1+cc*settings["meta"]["imgs_per_collage"]))
 		else:
 			cluster_collage_processor(settings, cc, 1+cc*settings["meta"]["imgs_per_collage"])
-	GS.FINISHED_TASKS+=1
+	GS.finished_tasks+=1
 
 # ---Rendering pre-processing functions---
 
@@ -826,6 +845,8 @@ def steps_guidance_pre_processor(settings):
 			settings["meta"]["steps"]=[settings["steps"]]
 		else:
 			settings["meta"]["steps"]=[settings["steps"][0]]
+	else:
+		settings["meta"]["steps"] = settings["steps"]
 
 	if type(settings["scale"])==list and quantity != 1:
 		settings["meta"]["scale"] = [round(x,6) for x in np.linspace(settings["scale"][0], settings["scale"][-1], quantity).tolist()]
@@ -834,6 +855,8 @@ def steps_guidance_pre_processor(settings):
 			settings["meta"]["scale"]=[settings["scale"]]
 		else:
 			settings["meta"]["scale"]=[settings["scale"][0]]
+	else:
+		settings["meta"]["scale"] = settings["scale"]
 
 # This function takes the passed variables and pre-processed steps/scale values and returns the desired value for the current image
 @handle_exceptions
@@ -846,8 +869,12 @@ def steps_guidance_processor(settings, img_settings, var_dict):
 # This function makes sure to process f-strings from other simpler fields
 @handle_exceptions
 def f_variables_processor(settings, img_settings, var_dict):
-	img_settings["dynamic_thresholding_mimic_scale"] = float(TM.f_string_processor([['f"""'+str(settings["dynamic_thresholding_mimic_scale"])+'"""']],settings["meta"]["eval_guard"],var_dict))
-	img_settings["dynamic_thresholding_percentile"] = float(TM.f_string_processor([['f"""'+str(settings["dynamic_thresholding_percentile"])+'"""']],settings["meta"]["eval_guard"],var_dict))
+	if img_settings["dynamic_thresholding"]:
+		img_settings["dynamic_thresholding_mimic_scale"] = float(TM.f_string_processor([['f"""'+str(settings["dynamic_thresholding_mimic_scale"])+'"""']],settings["meta"]["eval_guard"],var_dict))
+		img_settings["dynamic_thresholding_percentile"] = float(TM.f_string_processor([['f"""'+str(settings["dynamic_thresholding_percentile"])+'"""']],settings["meta"]["eval_guard"],var_dict))
+	else: # Without this there might be trouble if settings without specifications for dynamic thresholding are passed
+		img_settings["dynamic_thresholding_mimic_scale"] = 10
+		img_settings["dynamic_thresholding_percentile"] = 0.999
 	img_settings["negative_prompt_strength"] = float(TM.f_string_processor([['f"""'+str(settings["negative_prompt_strength"])+'"""']],settings["meta"]["eval_guard"],var_dict))
 	
 # ---Task processing functions---
@@ -855,24 +882,24 @@ def f_variables_processor(settings, img_settings, var_dict):
 # 12. This is the primary loop for iterating over the processing queue, which will either cancel and wipe if requested, skip if requested, or process the next task in the queue
 @handle_exceptions
 def process_queue():
-	GS.CANCEL_REQUEST = False
-	GS.PROCESSING_QUEUE_LEN = len(GS.PROCESSING_QUEUE)
-	for n in range(GS.PROCESSING_QUEUE_LEN):
-		if GS.CANCEL_REQUEST:
-			GS.CANCEL_REQUEST = False
+	GS.cancel_request = False
+	GS.queued_tasks = len(GS.processing_queue)
+	for n in range(GS.queued_tasks):
+		if GS.cancel_request:
+			GS.cancel_request = False
 			wipe_queue()
 			print('Task queue cancelled')
 			return
-		if GS.SKIP > 0:
-			GS.SKIPPED_TASKS += 1
-			print(f'Skipping task {GS.SKIPPED_TASKS}| There are {GS.PROCESSING_QUEUE_LEN} tasks left')
-			GS.SKIPPED_IMAGES += GS.PROCESSING_QUEUE.popleft()["meta"]["number_of_imgs"]
-			GS.SKIP -= 1
+		if GS.skip > 0:
+			GS.skipped_tasks += 1
+			print(f'Skipping task {GS.skipped_tasks}| There are {GS.queued_tasks} tasks left')
+			GS.skipped_images += GS.processing_queue.popleft()["meta"]["number_of_imgs"]
+			GS.skip -= 1
 		else:
-			if GS.END:
+			if GS.end:
 				print('Requested end of queue reached, finishing up')
 				return
-			result = process_task(GS.PROCESSING_QUEUE.popleft())
+			result = process_task(GS.processing_queue.popleft())
 			if result == 'Error':
 				wipe_queue()
 				print('Critical fault detected, task queue wiped')
@@ -883,7 +910,7 @@ def process_queue():
 # 13. Called by process_queue. Cancels processing if requested, otherwise calls the according function to process the next task
 @handle_exceptions
 def process_task(settings):
-	if GS.CANCEL_REQUEST:
+	if GS.cancel_request:
 		return
 	if settings["meta"]["processing_type"]=='cluster_collage':
 		result = cluster_collage_processor(settings)
@@ -896,10 +923,11 @@ def process_task(settings):
 # 14. Empties the queue and resets counters to 0
 @handle_exceptions
 def wipe_queue(instance=None):
-	GS.PROCESSING_QUEUE.clear()
-	GS.SKIPPED_TASKS=0
-	GS.FINISHED_TASKS=0
-	GS.PRODUCED_IMAGES=0
-	GS.SKIPPED_IMAGES=0
-	GS.QUEUED_IMAGES=0
+	GS.processing_queue.clear()
+	GS.queued_tasks = 0
+	GS.skipped_tasks = 0
+	GS.finished_tasks = 0
+	GS.produced_images = 0
+	GS.skipped_images = 0
+	GS.queued_images = 0
 	print('Task queue wiped')

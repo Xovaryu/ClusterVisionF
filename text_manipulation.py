@@ -118,10 +118,9 @@ def fallback_font_writer(draw, img, text, x, y, wrap_x, available_y_lines, line_
 			contextual_fill = fill
 		# Try to render the character with each font in the font list
 		font_used = None
-		for n in range(len(GS.FONT_LIST)):
-			# Check if the font has the character in its character map
-			if ord(char) in GS.TT_FONTS[n]['cmap'].getBestCmap().keys():
-				font_used = GS.FONT_OBJS[n]
+		for cached_font in GS.CACHED_FONTS:
+			if ord(char) in cached_font['cmap'].keys():
+				font_used = cached_font['font_obj']
 				break
 		# If no font was able to render the character, skip it
 		if not font_used:
