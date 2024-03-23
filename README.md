@@ -39,7 +39,6 @@ I also have a discord server where I organize all my AI image generation endeavo
 -Overhauled the UI element for samplers to be universal for any generation mode, and to support noise schedule as well  
 -This new UI element contains one small number field which is the sampler cutoff, which determines how many many samplers are in one row (0 means no limit)  
 -Added support for bulk settings import, you can now drop multiple .py files and they will all be automatically added into the queue  
--Fixed up and properly added support for sampler cutoff (that is the number of samplers per row)  
 
 #### Changes
 -BREAKING: Noise schedule is now always explicitly resolved. Old sampler strings without it should still work, but may use a different noise schedule than the implicit one  
