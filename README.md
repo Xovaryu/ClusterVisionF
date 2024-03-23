@@ -34,35 +34,47 @@ This tool is and will remain completely free to use, but if you could spare a bi
 I also have a discord server where I organize all my AI image generation endeavors including using this and other tools to try and gain a deeper understanding for certain characteristics of NAID, where we can share our results and so on: https://discord.gg/xJTwDVBa5b
 
 ## Change Log
-### Version 5.2
+### Version 5.3
 #### Additions/Features
--Added support for NAI's new Guidance Rescale feature  
--Added support for NAI's new metadata format  
--Themes are now properly supported from within the GUI, there are a couple default themes to pick from, and there are a few more options for coloring  
+-Overhauled the UI element for samplers to be universal for any generation mode, and to support noise schedule as well  
+-This new UI element contains one small number field which is the sampler cutoff, which determines how many many samplers are in one row (0 means no limit)  
+-Added support for bulk settings import, you can now drop multiple .py files and they will all be automatically added into the queue  
+-Fixed up and properly added support for sampler cutoff (that is the number of samplers per row)  
 
 #### Changes
--Set V3 as the default model  
--Renamed Scale into Guidance, as NAI did, though deliberately only partially  
--Adjusted the config popup size slightly to allow clicking outside to close it  
--Implemented better error messages and a small popup when trying to set the token  
--Migrated settings and themes into a new folder to prevent clutter now that themes are supported  
--Substantially streamlined and futureproofed the once frankly clumsy and ugly way of applying themes  
--Migrated all the file loading into its own module since it's now at over 300 lines of code, also improved file loading a lot  
--Improved configuration handling a lot  
--Optimized ScrollDropDownButton code to be smarter and a lot more capable to enable the theme color dropdown to scroll too  
+-BREAKING: Noise schedule is now always explicitly resolved. Old sampler strings without it should still work, but may use a different noise schedule than the implicit one  
+-Changed default sampler to euler in line with NAI's current default  
+-Changed the default value for the f-string steps input back to 28  
+-Added a hidden developer dialogue for heavy-handed bug hunting  
+-Slightly cleaned up handling and reporting of image metadata load failures  
+-Dropped support for Flowframes (for now at least)  
+-The sampler list field required exact usage of spaces, but it really shouldn't fail just because of more or less spaces, improved that  
+-Fixed the case of constants/variables in GS  
+-A new URL is needed to run third party NAI image generations, and the constants file with those now updates automatically  
 
 #### Bug Fixes
--Images made via inpainting are now also correctly detected as coming from V3  
--Name and folder name fields now accept a sane number range from -100000 to 100000  
--I borked the token test function when introducing new variables, it should work again  
--Fixed int scrolling inputs getting stuck in an invalid float state when applying increments with division  
+-RAM Leak: The list that is dynamically rebuilt for the "Load Theme" button didn't get unregistered and hence the buttons lingered after each click  
+-429 errors (concurrent generations) shouldn't cancel generation, and now they don't, going for a delayed retry as they should  
+-Single image generations incorrectly registered a lingering image generation into the according counter, causing it to display wrong numbers  
+-Removed some error reporting popup calls that could soft lock the program, the console reports those issues instead for now  
+-Guidance rescale should've had a fallback value of 0, and it wasn't consistently loaded either  
+-Some hidden widget like the seed grid buttons could still be inadvertently activated, adjusted the hide_widgets function further  
+-Once again improved the behavior and performance of message printing to keep the application responsive even under a flood of messages  
+-ScrollInputs failed to properly apply the provided rounding value, leading to cases where floating point inaccuracies still reared their ugly heads  
+-For debugging purposes build() is no longer excused from using @handle_exceptions since even there some crashes can be silent...  
+-Console colors now actively change too, but that only works properly when all console colors remain distinct  
+-Fixed an issue that could cause steps/scale to not be shown on cluster collages  
 
 ### Known Issues
--The negative prompt strength field does currently not work for cluster collages and f-strings, and there might be other hard to reproduce issues  
 -Selecting any part of text also visually affects the token counter, this bug is seemingly purely visual  
--Windows currently always starts CVF at native resolution  
+-Windows currently always starts CVF at native resolution, and Kivy's window size handling implementation is simply lacking, once Kivy 3.0.0 is a thing this will be re-visited  
+-Likewise font fallback will likely be added with Kivy 3.0.0 so we'll wait for that  
+-The console can sometimes blackout, this is an issue with the Label class and may also be fixed with Kivy 3.0.0 so this will be ignored for now too    
 -\ in evaluated parts of prompts don't work properly, this is a Python issue that should be fixed in 3.12 (which Torch doesn't support anytime soon), until then a BS constant is available  
 -Although video generation has been improved, There's a semi-random failure affecting video generation at times, and video generation is still plain inadequate  
+-Stopping a paused generation pops out one last generation instead of instantly stopping  
+-Many samplers may lead to too long filenames, causing cluster collages to fail saving  
+-If the number of samplers isn't properly divisible by the sampler cutoff, some images will likely not show up on the cluster collage, I won't fix this but add warnings in the future  
 
 ## NovelAI's Terms of Service
 This UI is compliant with NAI's ToS (https://novelai.net/terms), and the devs are well aware of this UI.  
