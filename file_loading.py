@@ -4,8 +4,8 @@ This module contains all the big functions to handle loading various files, most
 
 01.	LSBExtractor
 			This is a class for NAI's alpha channel metadata and has been copied over verbatim (thanks to the MIT license)
-02.	on_drop_file
-			Just checks the file ending and calls the according function
+02.	on_drop_file+on_drop_end
+			Each dropped file, even in a bulk, calls on_drop_file separately, so those get appeneded to a list and then on_drop_end triggers the processing
 03.	try_to_load
 			This function is used when trying to load settings from images or settings files, once per setting so it can report unfound settings
 04.	load_settings_from_py/load_settings_from_image

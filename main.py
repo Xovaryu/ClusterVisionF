@@ -626,6 +626,7 @@ class ClusterVisionF(App):
 		'dynamic_thresholding_percentile': float(TM.f_string_processor([['f"""'+self.decrisp_percentile_input.text+'"""']],self.config_window.eval_guard_button.enabled,blank_eval_dict)) if self.decrisp_button.enabled else 0.999,}
 		if self.check_settings(None, settings):
 			return
+		settings.update(IM_G.decode_sampler_string(settings["sampler"]))
 		print(settings)
 		self.single_img_button.disabled = True
 		self.process_button.disabled = True

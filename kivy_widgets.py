@@ -1482,8 +1482,6 @@ Do NOT run code in here that you do not trust. You have been warned.''', font_na
 		self.exec_button.bind(on_release=handle_exceptions(lambda x: exec(self.exec_input.text, globals(), self.ns)))
 GS.exec_popup = ExecPopup()
 
-from kivy.core.image import ImageData
-import tempfile
 class ToolTip(DropDown):
 	@handle_exceptions
 	def __init__(self, associated_widget, tooltip_text = '', **kwargs):
@@ -1546,8 +1544,6 @@ class ToolTip(DropDown):
 		arrow_x = widget_center_x - tip_pos[0]
 
 		self.bubble.flex_arrow_pos = [arrow_x, arrow_y]
-		#self.bglabel.text = str(self.bubble.flex_arrow_pos)
-		#self.bglabel.text += '\n' + str(self.bubble.arrow_image)
 		self.bubble.arrow_color = GS.theme["BgLBg"]["value"]
 
 ### Add decorators once done!
@@ -1574,7 +1570,7 @@ class ImageGenerationEntry(BoxLayout):
 # Class for a loaded set of metadata from an image in cache
 ###to be created and destroyed as needed or maybe better to make one and repurpose it?
 ###...we have the hide/unhide functions, maybe use those for objects and then go through a loop trying to load them and hiding unhiding them accordingly?
-class ImageGenerationMetadata(BoxLayout):
+class ImageGenerationMetadata(ModalView):
 	def __init__(self, **kwargs):
 		super().__init__(**kwargs)
 		self.orientation = 'vertical'
