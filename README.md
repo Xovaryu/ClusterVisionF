@@ -53,6 +53,7 @@ I also have a discord server where I organize all my AI image generation endeavo
 -Added live updated trackers for the state of queued/done/skipped tasks/images  
 
 #### Bug Fixes
+-Version 5.3.1: Fixed a missing line for single image generation that would guarantee instant failure
 -RAM Leak: The list that is dynamically rebuilt for the "Load Theme" button didn't get unregistered and hence the buttons lingered after each click  
 -429 errors (concurrent generations) shouldn't cancel generation, and now they don't, going for a delayed retry as they should  
 -Single image generations incorrectly registered a lingering image generation into the according counter, causing it to display wrong numbers  
