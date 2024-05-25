@@ -318,6 +318,8 @@ def load_settings_from_image(file_path):
 				GS.MAIN_APP.model_button.text = 'nai-diffusion-2'
 			elif metadata["info"]["Source"] == 'Stable Diffusion XL C1E1DE52' or metadata["info"]["Source"] == 'Stable Diffusion XL 8BA2AF87': # Anime Full V3/Inpaint V3
 				GS.MAIN_APP.model_button.text = 'nai-diffusion-3'
+			elif metadata["info"]["Source"] == 'Stable Diffusion XL 9CC2F394' or metadata["info"]["Source"] == 'Stable Diffusion XL C8704949': # Furry Full V3/Inpaint V3
+				GS.MAIN_APP.model_button.text = 'nai-diffusion-furry-3'
 			elif metadata["info"]["Source"] == 'Stable Diffusion': # This should normally not be encountered but some images in the past were generated like this due to a bug on NAI's side
 				print(f"[Warning] The loaded picture doesn't have the model specified. Defaulting to NAID Full V3, but be aware the original model for this picture might have been different")
 				GS.MAIN_APP.model_button.text = 'nai-diffusion-3'

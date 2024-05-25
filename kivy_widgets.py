@@ -93,6 +93,7 @@ from kivy.uix.scrollview import ScrollView
 from kivy.uix.popup import Popup
 from kivy.clock import Clock
 from kivy.metrics import sp, dp
+from kivy.properties import ListProperty
 
 ###Provisory copy for now
 RESOLUTIONS = copy.deepcopy(GS.NAI_RESOLUTIONS)
@@ -642,7 +643,7 @@ class SamplerInjectorDropDown(InjectorDropDown):
 		return string + ', '
 
 # 14. A slightly more advanced dropdown button that allows scrolling values without opening the dropdown
-class ScrollDropDownButton(Button):
+class ScrollDropDownBehavior(object):
 	@handle_exceptions
 	def __init__(self, associated_dropdown, get_children_func=None, set_state_func=None, **kwargs):
 		self.associated_dropdown = associated_dropdown
@@ -671,6 +672,28 @@ class ScrollDropDownButton(Button):
 				index = (current_index - 1) % len(self.children)
 			self.set_state_func(index)
 		return super().on_touch_down(touch)
+class ScrollDropDownButton(ScrollDropDownBehavior, Button):
+	pass
+class ScrollDropDownImage(ScrollDropDownBehavior, AsyncImage):
+	border = ListProperty([16, 16, 16, 16])
+	@handle_exceptions
+	def __init__(self, **kwargs):
+		super().__init__(**kwargs)
+		self.texture = Texture.create(size=(1,1), colorfmt='rgba')
+		self.fit_mode = 'contain'
+
+	@handle_exceptions
+	def load_image(self, image_data):
+		try:
+			image = PILImage.open(io.BytesIO(image_data))
+			if image.mode != 'RGBA':
+				image = image.convert('RGBA')
+			self.texture = Texture.create(size=(image.size[0], image.size[1]), colorfmt='rgba')
+			flipped_image = image.transpose(PILImage.FLIP_TOP_BOTTOM)
+			self.texture.blit_buffer(flipped_image.tobytes(), colorfmt='rgba', bufferfmt='ubyte')
+			Clock.schedule_once(handle_exceptions(lambda dt: setattr(self, 'opacity', 1)))
+		except:
+			traceback.print_exc()
 
 # 15. Class for the Cluster Collage/Image Sequence/Cluster Sequence buttons at the top, also handles showing/hiding the according elements and has bools for its state
 class ModeSwitcher(BoxLayout):
@@ -1254,19 +1277,17 @@ class ThemeButton(DropDownButton):
 		super().__init__(**kwargs)
 		self.bind(size=self.update_rect, pos=self.update_rect)
 	
-	#Will be called once upon opening the dropdown and initializing these buttons, and then as needed when a new theme is set
+	#Will be called once upon opening the dropdown and initializing these buttons, and then as needed, like when a new theme is set
 	@handle_exceptions
 	def update_rect(self, instance, value):
 		self.canvas.before.clear()
 		with self.canvas.before:
 			Color(*self.associated_dict['value'])
-			self.rect = Rectangle(pos=[self.pos[0]+self.size[0]+10,self.pos[1]+10], size=[30,30])
-			self.border1 = Line(rectangle=[self.rect.pos[0]-2, self.rect.pos[1]-2, self.rect.size[0]+4, self.rect.size[1]+4], width=2)
-			self.border2 = Line(rectangle=[self.rect.pos[0]-4, self.rect.pos[1]-4, self.rect.size[0]+8, self.rect.size[1]+8], width=2)
-			Color(0, 0, 0)
-			self.border3 = Line(rectangle=[self.rect.pos[0]-6, self.rect.pos[1]-6, self.rect.size[0]+12, self.rect.size[1]+12], width=2)
+			self.rect = Rectangle(pos=[self.pos[0]+self.size[0]+5,self.pos[1]+5], size=[40,40])
+			Color(0, 0, 0) # For proper contrast and visibility the colors get a black/white double border
+			self.black_border = Line(rectangle=[self.rect.pos[0]-1, self.rect.pos[1]-1, self.rect.size[0]+2, self.rect.size[1]+2], width=2)
 			Color(1, 1, 1)
-			self.border4 = Line(rectangle=[self.rect.pos[0]-8, self.rect.pos[1]-8, self.rect.size[0]+16, self.rect.size[1]+16], width=2)
+			self.white_border = Line(rectangle=[self.rect.pos[0]-3, self.rect.pos[1]-3, self.rect.size[0]+6, self.rect.size[1]+6], width=2)
 
 # 23. A full pre-assembled layout for the entire theme handling part currently implemented into the configuration window
 class ThemeLayout(BoxLayout):
@@ -1479,6 +1500,7 @@ Do NOT run code in here that you do not trust. You have been warned.''', font_na
 		self.exec_button = Button(text="⚠⚠⚠EXECUTE⚠⚠⚠", font_name = 'Unifont', size_hint=(1, None), size=(100, field_height))
 		self.layout.add_widget(self.exec_input)
 		self.layout.add_widget(self.exec_button)
+		self.layout.add_widget(Label(text='CVF Version: ' + str(GS.VERSION), size_hint=(1, None), height = field_height))
 		self.exec_button.bind(on_release=handle_exceptions(lambda x: exec(self.exec_input.text, globals(), self.ns)))
 GS.exec_popup = ExecPopup()
 
@@ -1551,20 +1573,14 @@ class ToolTip(DropDown):
 class ImageGeneratorDropdown(BoxLayout):
 	pass
 
-# Class for image generation entries both those created via AI as well as those loaded from disk
+# Class for image generation entries both those created via AI as well as those imported
 class ImageGenerationEntry(BoxLayout):
 	def __init__(self, image, **kwargs):
 		super().__init__(**kwargs)
 		self.orientation = 'horizontal'
-
-		# Load the image from the provided png_data
-		self.image = ImagePreview()
-		self.image.load_image(image)
-		self.add_widget(self.image)
 		
 		### Add all the needed buttons
 		# View function, click on thumbnail?
-		# ControlNet functions
 		# Metadata injector functions
 
 # Class for a loaded set of metadata from an image in cache

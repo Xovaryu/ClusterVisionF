@@ -10,6 +10,7 @@ import ast
 import sys
 from initialization import handle_exceptions, GlobalState
 GS = GlobalState()
+from packaging.version import Version
 
 FALLBACK_CONFIG = {
 	'1.User_Settings':
@@ -71,7 +72,7 @@ USER_UCS = [
 """,
 	'2.NAID_Constants':
 f"""#The URL to which the requests are sent
-NAID_CONST_VERSION = {GS.VERSION}
+NAID_CONST_VERSION = '{GS.VERSION}'
 URL='https://image.novelai.net/ai/generate-image'
 URL_ANNOTATE='https://image.novelai.net/ai/annotate-image'
 #This is a list reflecting the online UI UC presets of NAI
@@ -125,6 +126,7 @@ NAI_PROMPT_CHUNKS=[
 #These are the names used to address certain models
 NAI_MODELS={{
 'NAI Anime Full V3':'nai-diffusion-3',
+'NAI Furry V3':'nai-diffusion-furry-3',
 'NAI Anime Full V2':'nai-diffusion-2',
 'NAI Furry':'nai-diffusion-furry',
 'NAI Curated':'safe-diffusion',
@@ -443,9 +445,9 @@ for name, path in CONFIG_FILES.items():
 # Make sure that the NAID constants file is up to date
 if getattr(GS, 'NAID_CONST_VERSION', None) == None:
 	write_config_file("2.NAID_Constants", load = True)
-elif GS.NAID_CONST_VERSION < GS.VERSION:
+elif Version(str(GS.NAID_CONST_VERSION)) < Version(str(GS.VERSION)):
 	write_config_file("2.NAID_Constants", load = True)
-	
+
 # This loop ensures that default theme files are always present
 for name, content in THEMES.items():
 	if not os.path.exists(os.path.join(GS.THEMES_DIR, f"{name}.py")):

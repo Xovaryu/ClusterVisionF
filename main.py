@@ -546,14 +546,28 @@ class ClusterVisionF(App):
 		meta_layout.add_widget(task_state_layout)
 
 		# The KW.ImagePreview goes currently alone on the right
+		image_organization_layout = BoxLayout(orientation='vertical')
 		self.preview = KW.ImagePreview()
+		image_organization_layout.add_widget(self.preview)
+		
+		image_lists_layout = BoxLayout(orientation='horizontal')
+		
+		generation_history_dropdown = DropDown()
+		self.generation_history_thumbnail = KW.ScrollDropDownImage(associated_dropdown = generation_history_dropdown)
+		image_lists_layout.add_widget(self.generation_history_thumbnail)
+		
+		image_import_dropdown = DropDown()
+		self.image_import_thumbnail = KW.ScrollDropDownImage(associated_dropdown = image_import_dropdown)
+		image_lists_layout.add_widget(self.image_import_thumbnail)
+		
+		#image_organization_layout.add_widget(image_lists_layout)
 
 		# The super_layout is highest layout in the hierarchy and is also the one that is returned for Kivy to display
-		# It has the user interaction section left, the console/metadata section in the middle, and the image preview on the right		
+		# It has the user interaction section left, the console/metadata section in the middle, and the image organization on the right		
 		self.super_layout = BoxLayout(orientation='horizontal')
 		self.super_layout.add_widget(input_layout)
 		self.super_layout.add_widget(meta_layout)
-		self.super_layout.add_widget(self.preview)
+		self.super_layout.add_widget(image_organization_layout)
 
 		self.cc_exclusive_widgets = [cc_seed_label, self.cc_seed_import, self.cc_seed_grid,
 			cc_dim_label, self.cc_dim_import, cc_dim_layout]
@@ -571,7 +585,7 @@ class ClusterVisionF(App):
 
 		#Window.size = [1916, 2003] # These are test values I would use when making the application able to remember it's last window size/pos
 		#Window.left = 854 # Unfortunately right now, and for the part of a decade kivy (or SDL downstream) quietly applies the system scaling when using Window.size
-		#Window.top = 29 # Since this is at best highly abnormal design with very undesired consequences that may be fixed for Kivy 3 I will just focus elsewhere
+		#Window.top = 29 # Since this is at best highly abnormal design that at least somewhat be adjusted with Kivy 3 it's likely best to wait until then
 		return self.super_layout
 
 	# This function checks the validity of passed settings
