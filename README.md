@@ -15,15 +15,14 @@ Currently you can either subscribe to my Patreon page (5$) to get a .zip with a 
 If you opt to run this repo yourself, set up python and the dependencies as mentioned below. I strongly recommend Python 3.10. Other version may or may not work. Once Torch is actually used for SD other versions will almost certainly not work until Torch supports higher versions.
 Clone/download the files from this repository to your preferred folder.
 Once you have the folder set up with the files, run main.py, and set your token in the settings window (small gear icon in the upper left corner). To do that, fetch your authorization string from the NovelAI website (example process in Firefox would be "F12 → Storage → Local Storage → https://novelai.net → session → right-click on the field on the right and copy"), then put the entire string into the field and click "Set Token".
-GenerationZone.py is in need of an update for now, and will likely have you run into trouble running it.  
-This is the UI you can expect:
-![Image](https://cdn.discordapp.com/attachments/1074334168378519622/1088219244803666052/image.png)
-(There will be support for changing themes directly in the program later. After running the file once you can also edit "3.Theme.py" to your liking.)
+This is the UI you can expect, themes can be changed within the program:
+![Main UI](https://files.catbox.moe/uzsa53.png)
+![Config UI](https://files.catbox.moe/hcx1qp.png)
 ## Example Outputs
 Video:
 [![Video](https://img.youtube.com/vi/XZLiKBt1J_I/maxresdefault.jpg)](https://www.youtube.com/watch?v=XZLiKBt1J_I)
 Cluster Collage:
-![Image](https://cdn.discordapp.com/attachments/1074334168378519622/1088222376023556197/MultiMonsterGirlDemonstration_CollageClusterk_dpmpp_2m_smea.jpg)
+![Sample Cluster Collage](https://files.catbox.moe/rejfan.jpg)
 
 ## Prerequisites
 - Python 3.10 (other versions may or may not work)  
