@@ -22,8 +22,9 @@ text_manipulation.py
 			!: Should probably be deprecated and removed completely
 08.	escape_quotes_for_saving
 			This simple function does what the title says, it escapes all quotes so that they can be saved and loaded from files properly
-09.	save_settings
+09.	save_settings + save_image_entries
 			Takes a settings dict and then saves it as a neatly formatted .py file that can be re-imported later
+			Though save_image_entries is technically not text manipulation, it is right along here with save_settings as it's called together with it, if at all
 			!: Likely needs filepath adjustments
 10.	FilePathHandler
 			This class handles the various requirements of generating/evaluating filepaths correctly during task processing
@@ -32,9 +33,15 @@ text_manipulation.py
 from initialization import handle_exceptions, GlobalState
 GS = GlobalState()
 import os
+import zlib
+import base64
+import json
 import traceback
+from copy import deepcopy
 from collections import deque
 from PIL import ImageDraw, ImageOps
+import numpy as np
+import math
 
 BS = '\\' # This is here because f-strings do not yet (until Python 3.12 most likely) support backstrings in the evaluated part, necessitating this BS workaround
 
@@ -200,9 +207,9 @@ def fallback_font_writer(draw, img, text, x, y, wrap_x, available_y_lines, line_
 		draw.text((task[0], y), task[1], font=task[2], fill=task[4])
 		#print(f'type Dump drawing {task[1]}')
 
-	return draw, img, used_lines
+	return draw, img, used_lines, line_width
 
-# 5. In order to make writing prompts in f-string style possible properly, some adjustments for brackets/quotes/backslashes are needed, this function handles that
+# 5. To make writing prompts in f-string style possible properly, some adjustments for brackets/quotes/backslashes are needed, this function handles that
 @handle_exceptions
 def f_string_pre_processor(text):
 	result = ''
@@ -234,7 +241,7 @@ def f_string_pre_processor(text):
 			result += '{{'
 		elif char == '}':
 			result += '}}'
-		# Because of the conflict of {} used both in f-strings and strengthening in NAI, we instead give the user another type of braces to used
+		# Because of the conflict of {} used both in f-strings and strengthening in NAI, we instead give the user different braces to use
 		elif char == '⁅':
 			result += '{'
 			brace_level += 1
@@ -242,7 +249,7 @@ def f_string_pre_processor(text):
 			result += '}'
 			brace_level -= 1
 		# Since f-string is evaluated based on triple ", any occurence of these in the f-string outside the evaluated area needs to be manually escapeds
-		elif char == '"' and (3 < i < (len(text)-3)):
+		elif char == '"' and brace_level == 0:
 			result += '\\"'
 		# And lastly whle backslashes would work outside of the evaluated parts they'd behave unexpected due to the way escaping works, so we double them up
 		elif char == '\\':
@@ -250,26 +257,27 @@ def f_string_pre_processor(text):
 		else:
 			result += char
 	if brace_level != 0:
-		raise ValueError(f"Mismatched braces in input string. b_l: {brace_level} | text: {text}")
+		raise ValueError(f"[Warning] Mismatched braces in input string. b_l: {brace_level} | text: {text}")
 	return result
 
-# 6. This function takes an f-string that has already been pre-processed and evaluates it according to the passed variables
+# 6. This function takes an f-string, uses the pre-processor, and evaluates it according to the passed variables
 # No @handle_exceptions since this function has it's own exception handling
-def f_string_processor(string_lists, eval_guard, var_dict):
+def f_string_processor(string_list, eval_guard, var_dict):
 	processed_string=""
-	for string_list in string_lists:
+	for string in string_list:
 		if eval_guard:
-			try:
-				processed_string+=eval(f_string_pre_processor(string_list[0]),{'__builtins__':{}},{'prompt_list':string_list}|var_dict)
+			try: # Here we manually override access to builtins for extra safety
+				processed_string+=eval('f"""'+f_string_pre_processor(string)+'"""',{'np': np,'math': math,'__builtins__':{}},{'prompt_list':string}|var_dict)
 			except:
+				#print(f"Full Call Stack: {''.join(traceback.format_stack())}")
 				traceback.print_exc()
-				return 'Error'
+				return 'Error' # Reported above
 		else:
 			try:
-				processed_string+=eval(f_string_pre_processor(string_list[0]),{},{'prompt_list':string_list}|var_dict)
+				processed_string+=eval('f"""'+f_string_pre_processor(string)+'"""',{'np': np,'math': math},{'prompt_list':string}|var_dict)
 			except:
 				traceback.print_exc()
-				return 'Error'
+				return 'Error' # Reported above
 	return processed_string
 
 # 7. This function forms file paths for the generate_as_is function
@@ -309,7 +317,7 @@ def save_settings(folder_name,settings,sub_folder=''):
 	with open(f'__0utput__/{replace_forbidden_symbols(folder_name)}{sub_folder}/settings꞉{replace_forbidden_symbols(settings["name"])}.py','w',encoding="utf_16") as file:
 		file.write('settings={\n')
 		for key, value in settings.items():
-			if key == 'meta':
+			if key == 'meta' or key == 'image_entries':
 				continue
 			if isinstance(value, list) and all(isinstance(item, list) for item in value):
 				file.write(f"{repr(key)}: [")
@@ -326,6 +334,44 @@ def save_settings(folder_name,settings,sub_folder=''):
 				file.write(f"{repr(key)}: {repr(value)},\n")
 		file.write('}')
 	file.close
+
+	if settings.get('image_entries'):
+		save_image_entries(folder_name,settings,sub_folder)
+
+@handle_exceptions
+def save_image_entries(folder_name, settings, sub_folder=''):
+	# Shallow copy of the list
+	image_entries = settings["image_entries"][:]
+	
+	for i, entry in enumerate(image_entries):
+		# Shallow copy of each dictionary to avoid changing original entry
+		entry_copy = entry.copy()
+		
+		# Compress the raw image data
+		compressed_image = zlib.compress(entry_copy["entry_reference"].raw_image_data, level=9)
+		# Encode the compressed data
+		entry_copy["entry_reference"] = base64.b64encode(compressed_image).decode('ascii')
+		
+		for type in ["vt", "i2i"]:
+			if entry_copy.get(type):
+				# Deep copy to modify safely without altering original
+				type_copy = deepcopy(entry_copy[type])
+				for key, value in type_copy.items():
+					if value != '':
+						type_copy[key] = escape_quotes_for_saving(str("'''" + value + "'''"))
+				entry_copy[type] = type_copy
+		
+		# Replace the original entry with the modified copy
+		image_entries[i] = entry_copy
+	
+	# Convert the entire structure to JSON
+	json_data = json.dumps(image_entries, separators=(',', ':'))
+	
+	# Compress the JSON data
+	compressed_data = zlib.compress(json_data.encode('utf-8'), level=9)
+	
+	with open(f'__0utput__/{replace_forbidden_symbols(folder_name)}{sub_folder}/image_entries꞉{replace_forbidden_symbols(settings["name"])}.cvfimgs', 'wb') as file:
+		file.write(compressed_data)
 
 # 10. Provides a centralized way for tasks to handle filepaths
 @handle_exceptions

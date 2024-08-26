@@ -48,17 +48,14 @@ class GlobalState(EventDispatcher):
 	def __new__(cls):
 		if cls._instance is None:
 			cls._instance = super().__new__(cls)
-			cls._instance.VERSION = '5.3.1'
+			cls._instance.VERSION = '6.0.0'
 			cls._instance.MAIN_APP = None
 			cls._instance.FULL_DIR = full_dir
 			cls._instance.EXECUTOR = ThreadPoolExecutor()
 			
 			cls._instance.theme = None
-			cls._instance.futures = []
-			cls._instance.wait_time = 1
 			cls._instance.processing_queue = deque()
 			cls._instance.cancel_request = False
-			cls._instance.pause_request = False
 			cls._instance.overwrite_images = False
 			cls._instance.generate_images = True
 			cls._instance.last_error = None
@@ -66,16 +63,12 @@ class GlobalState(EventDispatcher):
 			cls._instance.last_seed = ''
 			cls._instance.pre_last_seed = ''
 			cls._instance.preview_queue = []
-			cls._instance.registered_text_inputs = []
-			cls._instance.registered_menu_buttons = []
-			cls._instance.registered_dropdown_buttons = []
-			cls._instance.registered_state_buttons = []
-			cls._instance.registered_labels = []
-			cls._instance.registered_bglabels = []
-			cls._instance.registered_tooltiplabels =  []
+			cls._instance.theme_self_updating_widgets = []
 			cls._instance.verbose =  False
 			cls._instance.skip = 0
 			cls._instance.end = False
+			cls._instance.last_i2i_image = None
+			cls._instance.tooltip_widgets = {}
 		return cls._instance
 GS = GlobalState()
 
@@ -86,8 +79,14 @@ def handle_exceptions(func):
 		try:
 			return func(*args, **kwargs)
 		except:
-			traceback.print_exc()
-			GS.last_error = traceback.format_exc()
+			full_error_report = f'''Error in function: '{func}'
+Function module: '{func.__module__}'
+Function args: {args}
+Function kwargs: {kwargs}
+Full Call Stack: {''.join(traceback.format_stack())}
+Exception: {traceback.format_exc()}'''
+			sys.stderr.write(full_error_report)
+			GS.last_error = full_error_report
 	return wrapper
 
 # The config handler must be imported at this later point since it loads values into the GlobalState and like all modules uses @handle_exceptions

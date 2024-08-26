@@ -184,8 +184,8 @@ THEME = {
 	'SBtnBgOff': {'Name': 'State Buttons: Inactive', 'value': [0.8545098888458931, 0.0, 0.0, 1]},
 	
 	'TTText': {'Name': 'Tooltip: Text', 'value': [1.0, 1.0, 1.0, 1]},
-	'TTBg': {'Name': 'Tooltip: Background', 'value': [0, 0, 0, 1]},
-	'TTBgOutline': {'Name': 'Tooltip: Background Outline', 'value': [1.0, 1.0, 1.0, 1]},
+	'TTBg': {'Name': 'Tooltip: Background', 'value': [0.23529411764705882, 0.23137254901960785, 0.23772779747182893, 1]},
+	'TTBgOutline': {'Name': 'Tooltip: Background Outline', 'value': [1, 0.30000000000000004, 0.30000000000000004, 1]},
 }
 """,
 }
@@ -217,8 +217,8 @@ THEME = {
 	'SBtnBgOff': {'Name': 'State Buttons: Inactive', 'value': [0.8545098888458931, 0.0, 0.0, 1]},
 	
 	'TTText': {'Name': 'Tooltip: Text', 'value': [1.0, 1.0, 1.0, 1]},
-	'TTBg': {'Name': 'Tooltip: Background', 'value': [0, 0, 0, 1]},
-	'TTBgOutline': {'Name': 'Tooltip: Background Outline', 'value': [1.0, 1.0, 1.0, 1]},
+	'TTBg': {'Name': 'Tooltip: Background', 'value': [0.23529411764705882, 0.23137254901960785, 0.23772779747182893, 1]},
+	'TTBgOutline': {'Name': 'Tooltip: Background Outline', 'value': [1, 0.30000000000000004, 0.30000000000000004, 1]},
 }
 """,
 	'OriginalBlue':
@@ -247,9 +247,9 @@ THEME = {
 	'SBtnBgOn': {'Name': 'State Buttons: Active', 'value': [0, 1, 0, 1]},
 	'SBtnBgOff': {'Name': 'State Buttons: Inactive', 'value': [1, 0, 0, 1]},
 	
-	'TTText': {'Name': 'Tooltip: Text', 'value': [1.0, 1.0, 1.0, 1]},
-	'TTBg': {'Name': 'Tooltip: Background', 'value': [0, 0, 0, 1]},
-	'TTBgOutline': {'Name': 'Tooltip: Background Outline', 'value': [1.0, 1.0, 1.0, 1]},
+	'TTText': {'Name': 'Tooltip: Text', 'value': [0.9237999199237548, 0.8475998398475096, 1.0, 1]},
+	'TTBg': {'Name': 'Tooltip: Background', 'value': [0.10459611779609065, 0.06973074519739375, 0.34865372598696903, 1]},
+	'TTBgOutline': {'Name': 'Tooltip: Background Outline', 'value': [0.6, 0.85, 1, 1]},
 }
 """,
 	'Obsidian':
@@ -278,9 +278,9 @@ THEME = {
 	'SBtnBgOn': {'Name': 'State Buttons: Active', 'value': [0.0, 0.6786762036938186, 1.0, 1]},
 	'SBtnBgOff': {'Name': 'State Buttons: Inactive', 'value': [0.8747347069499306, 0.7137254901960784, 0.0, 1]},
 	
-	'TTText': {'Name': 'Tooltip: Text', 'value': [1.0, 1.0, 1.0, 1]},
-	'TTBg': {'Name': 'Tooltip: Background', 'value': [0, 0, 0, 1]},
-	'TTBgOutline': {'Name': 'Tooltip: Background Outline', 'value': [1.0, 1.0, 1.0, 1]},
+	'TTText': {'Name': 'Tooltip: Text', 'value': [0.7, 1, 0.775, 1]},
+	'TTBg': {'Name': 'Tooltip: Background', 'value': [0.0, 0.0, 0.0, 1]},
+	'TTBgOutline': {'Name': 'Tooltip: Background Outline', 'value': [0.4, 0.775, 1, 1]},
 }
 """,
 	'Midnight':
@@ -311,7 +311,7 @@ THEME = {
 	
 	'TTText': {'Name': 'Tooltip: Text', 'value': [1.0, 1.0, 1.0, 1]},
 	'TTBg': {'Name': 'Tooltip: Background', 'value': [0, 0, 0, 1]},
-	'TTBgOutline': {'Name': 'Tooltip: Background Outline', 'value': [1.0, 1.0, 1.0, 1]},
+	'TTBgOutline': {'Name': 'Tooltip: Background Outline', 'value': [0.6273550227165644, 1.0, 0.571707145848315, 1.0]},
 }
 """,
 	'BrightBurns':
@@ -340,9 +340,9 @@ THEME = {
 	'SBtnBgOn': {'Name': 'State Buttons: Active', 'value': [0.0, 0.5425244653215189, 0.0, 1]},
 	'SBtnBgOff': {'Name': 'State Buttons: Inactive', 'value': [0.6596149603216966, 0.0, 0.0, 1]},
 	
-	'TTText': {'Name': 'Tooltip: Text', 'value': [1.0, 1.0, 1.0, 1]},
-	'TTBg': {'Name': 'Tooltip: Background', 'value': [0, 0, 0, 1]},
-	'TTBgOutline': {'Name': 'Tooltip: Background Outline', 'value': [1.0, 1.0, 1.0, 1]},
+	'TTText': {'Name': 'Tooltip: Text', 'value': [0.0, 0.0, 0.0, 1]},
+	'TTBg': {'Name': 'Tooltip: Background', 'value': [1.0, 1.0, 1.0, 1]},
+	'TTBgOutline': {'Name': 'Tooltip: Background Outline', 'value': [0.4738009273886657, 0.4738009273886657, 0.4738009273886657, 1]},
 }
 """,
 }
