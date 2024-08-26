@@ -7,6 +7,7 @@ Want to make an XY collage where one axis is the scale and another is a list suc
 Want to compare multiple images with slightly or totally different prompts on the same seed and across different seeds at once? You can make a cluster collage like that with virtually no extra work.
 Want to make a sequence/video of cluster collages with that level of complexity but then changing steps/scale/whatever you want over time? Sure. If you can think of the conditions and relations you wanna test, there is a pretty solid chance CVF can do it, and without you having to create a ton of images while adjusting the settings yourself all the time.
 The limit isn't quite the sky, but rather Python's f-strings.
+Also CVF now has internal tooltips for fields and buttons that allow the program to explain itself at run-time with little to no need for external documentation. These tooltips can be brought up with right clicking.
 
 ## Usage
 Currently this UI also needs an active NovelAI subscription, so keep that in mind (there is a hint about NAI's ToS at the end of this README).  
@@ -18,6 +19,7 @@ Once you have the folder set up with the files, run main.py, and set your token 
 This is the UI you can expect, themes can be changed within the program:
 ![Main UI](https://files.catbox.moe/uzsa53.png)
 ![Config UI](https://files.catbox.moe/hcx1qp.png)
+![Tooltips/Metadata UI](https://files.catbox.moe/bffgzq.png)
 ## Example Outputs
 Video:
 [![Video](https://img.youtube.com/vi/XZLiKBt1J_I/maxresdefault.jpg)](https://www.youtube.com/watch?v=XZLiKBt1J_I)
@@ -33,38 +35,41 @@ This tool is and will remain completely free to use, but if you could spare a bi
 I also have a discord server where I organize all my AI image generation endeavors including using this and other tools to try and gain a deeper understanding for certain characteristics of NAID, where we can share our results and so on: https://discord.gg/xJTwDVBa5b
 
 ## Change Log
-### Version 5.3
+### Version 6
 #### Additions/Features
--Overhauled the UI element for samplers to be universal for any generation mode, and to support noise schedule as well  
--This new UI element contains one small number field which is the sampler cutoff, which determines how many many samplers are in one row (0 means no limit)  
--Added support for bulk settings import, you can now drop multiple .py files and they will all be automatically added into the queue  
+-Image2image and vibe transfer are now fully supported, this includes them being shown as thumbnails on cluster collages too  
+-CVF now has a generation history, and it's capped at a user specified number of saved images  
+-CVF now has a list of loaded images that persist until deleted, these can be used for i2i/VT, generated images can be loaded into that list  
+-The i2i/VT state is saved into it's very own file format along with, but separate from CVF settings, this means any i2i/VT state can instantly be restored in full with just a drag'n'drop  
+-What .cvfimgs contains is on a technical level a maximally zlib compressed python dict with the full images in base 64  
+-CVF now also has an internal metadata reader, both generated and loaded images can be parsed for their full EXIF/alpha metadata within the program  
+-The wait time between generations can now be controlled with an according field  
+-There are now buttons to enable/disable all import buttons simultaneously  
+-CVF now has tooltips, that means various fields and buttons will explain themselves with just a simple right click on them  
 
 #### Changes
--BREAKING: Noise schedule is now always explicitly resolved. Old sampler strings without it should still work, but may use a different noise schedule than the implicit one  
--Changed default sampler to euler in line with NAI's current default  
--Changed the default value for the f-string steps input back to 28  
--Added a hidden developer dialogue for heavy-handed bug hunting  
--Slightly cleaned up handling and reporting of image metadata load failures  
--Dropped support for Flowframes (for now at least)  
--The sampler list field required exact usage of spaces, but it really shouldn't fail just because of more or less spaces, improved that  
--Fixed the case of constants/variables in GS  
--A new URL is needed to run third party NAI image generations, and the constants file with those now updates automatically  
--Added live updated trackers for the state of queued/done/skipped tasks/images  
+-Some drag'n'drop operations are now location sensitive, images dropped on the right will be loaded, while on the left they will still be scanned for metadata  
+-Optimized handling of the theme colors display which should also lead to a... microscopic performance increase  
+-Split settings and theme configuration apart  
+-There are new values for the new tooltips in the themes, either delete old files and let them regenerate, or adjust these tooltips to your liking  
+-Improved the error reporting function  
+-Disabled fields for undesired content strength, mimic scale and percentile as NAID now deliberately ignores these variables  
+-Scale values can be anything except 0, so the base field restrictions have been adjusted  
+-Properly put the token test into its own separate thread which doesn't halt the program anymore  
 
 #### Bug Fixes
--Version 5.3.1: Fixed a missing line for single image generation that would guarantee instant failure
--RAM Leak: The list that is dynamically rebuilt for the "Load Theme" button didn't get unregistered and hence the buttons lingered after each click  
--429 errors (concurrent generations) shouldn't cancel generation, and now they don't, going for a delayed retry as they should  
--Single image generations incorrectly registered a lingering image generation into the according counter, causing it to display wrong numbers  
--Removed some error reporting popup calls that could soft lock the program, the console reports those issues instead for now  
--Guidance rescale should've had a fallback value of 0, and it wasn't consistently loaded either  
--Some hidden widget like the seed grid buttons could still be inadvertently activated, adjusted the hide_widgets function further  
--Once again improved the behavior and performance of message printing to keep the application responsive even under a flood of messages  
--ScrollInputs failed to properly apply the provided rounding value, leading to cases where floating point inaccuracies still reared their ugly heads  
--For debugging purposes build() is no longer excused from using @handle_exceptions since even there some crashes can be silent...  
--Console colors now actively change too, but that only works properly when all console colors remain distinct  
--Fixed an issue that could cause steps/scale to not be shown on cluster collages  
--Very quick production of cluster collages could possibly cause uncaught issues due to parallel access to font files, those are now properly cached  
+-The counter for skipped images didn't always get properly reset  
+-Removed GS.futures since I didn't actually use it and it considerably leaked into the RAM for no benefit  
+-Fixed the seed grid to not leak widgets when lowering the number of seeds, though the gain is tiny  
+-There was a little dumb bug that could cause settings with absolutely no UC to fail loading  
+-Stopping after a pause shouldn't produce a final image anymore  
+-Fixed multiple issues with how sampler strings were handled  
+-Due to a simple oversight pressing C to clear seed fields still cleared the field even if the user actually used CTRL+C which was... suboptimal  
+-Updated the NAID alpha metadata importing code which also fixes a hard lock bug with images too small to have alpha metadata  
+-Fixed a tiny and functionally irrelevant bug when video generation is cancelled immediately  
+-Improved sampler string adding  
+-Tasks could still be added into a running queue via bulk queueing, but those tasks wouldn't be processed, prevented such queueing now  
+-The pause button could get desynched   
 
 ### Known Issues
 -Selecting any part of text also visually affects the token counter, this bug is seemingly purely visual  
@@ -72,10 +77,10 @@ I also have a discord server where I organize all my AI image generation endeavo
 -Likewise font fallback will likely be added with Kivy 3.0.0 so we'll wait for that  
 -The console can sometimes blackout, this is an issue with the Label class and may also be fixed with Kivy 3.0.0 so this will be ignored for now too    
 -\ in evaluated parts of prompts don't work properly, this is a Python issue that should be fixed in 3.12 (which Torch doesn't support anytime soon), until then a BS constant is available  
--Although video generation has been improved, There's a semi-random failure affecting video generation at times, and video generation is still plain inadequate  
--Stopping a paused generation pops out one last generation instead of instantly stopping  
+-Video generation is still plain inadequate  
 -Many samplers may lead to too long filenames, causing cluster collages to fail saving  
 -If the number of samplers isn't properly divisible by the sampler cutoff, some images will likely not show up on the cluster collage, I won't fix this but add warnings in the future  
+-The new options for the user settings work, but can't yet be saved and automatically reloaded  
 
 ## NovelAI's Terms of Service
 This UI is compliant with NAI's ToS (https://novelai.net/terms), and the devs are well aware of this UI.  
