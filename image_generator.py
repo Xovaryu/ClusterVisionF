@@ -2,8 +2,6 @@
 image_generator.py
 	This module is responsible for the actual image (and video) generation
 
-01.	form_prompt
-			Takes the settings dict and reformats it into the format NAI expects
 02.	image_gen
 			This is the primary function to generate images, it takes the finished settings, requests the generation from NAI's servers
 			It will retry until either the generation was successful, or cancelled
@@ -74,81 +72,7 @@ GS.tracker = SummaryTracker()
 
 # ---Primary Functions---
 
-# 1. Takes the settings and reformats them for NAI's API
-@handle_exceptions
-def form_prompt(settings,number=1):
-	#if settings["dynamic_thresholding_percentile"] <= 0:
-	#	settings["dynamic_thresholding_percentile"] = 0.000001
-	#	print("[Warning] Dynamic thresholding percentile too low, adjusting to 0.000001, check your settings")
-	#elif settings["dynamic_thresholding_percentile"] > 1:
-	#	settings["dynamic_thresholding_percentile"] = 1
-	#	print("[Warning] Dynamic thresholding percentile too high, adjusting to 1, check your settings")
-	if True:#not settings["dynamic_thresholding"]:
-		settings["dynamic_thresholding_mimic_scale"] = 10
-		settings["dynamic_thresholding_percentile"] = 0.999
-	json_construct={
-		#This is the prompt, Quality Tags are not configured separately and net to be appended here manually
-		'input': settings["prompt"],
-		#Model as in UI (Curated/Full/Furry)
-		'model': settings["model"],															
-		'parameters': {
-			#Seed as in UI
-			'seed': int(settings["seed"]),
-			#Undesired Content as in UI
-			'negative_prompt': settings["negative_prompt"],
-			#Image Width as in UI
-			'width': settings["img_mode"]["width"],
-			#Image Height as in UI
-			'height': settings["img_mode"]["height"],	
-			#Number of images to generate, currently this script isn't configured to handle more than 1 at a time
-			'n_samples': number,
-			#Sampler as in UI
-			'sampler': settings["sampler"],
-			#Noise Schedule as in UI
-			'noise_schedule': settings["noise_schedule"],
-			#Guidance as in UI
-			'scale': settings["scale"],
-			#Prompt Guidance Rescale as in UI
-			'cfg_rescale': settings["guidance_rescale"],
-			#Steps as in UI
-			'steps': settings["steps"],
-			#Noise as in UI and thus ineffective for standard generation
-			#'noise': noise,
-			#Strength as in UI and thus ineffective for standard generation
-			#'strength': strength,
-			'sm': settings["smea"],
-			'sm_dyn': settings["dyn"],
-			# Decrisper
-			'dynamic_thresholding': settings["dynamic_thresholding"],
-			# These are settings for the decrisper that are NOT visible on the website, are nowadays deliberately ignored, but need to be passed otherwise their server fails to generate
-			'dynamic_thresholding_mimic_scale': settings["dynamic_thresholding_mimic_scale"],
-			'dynamic_thresholding_percentile': settings["dynamic_thresholding_percentile"],
-			'quality toggle': False,
-			# This variable has been axed
-			'uncond_scale': 1,#float(settings["negative_prompt_strength"])/100,
-			'legacy_v3_extend': False,
-			}
-		}
-	# Handle img2img
-	if settings.get('img2img'):
-		json_construct['action'] = "img2img"
-		json_construct['parameters'].update(settings["img2img"])
 
-	# Handle vibe transfer
-	if settings.get('vibe_transfer'):
-		vt_dict = {
-			'reference_image_multiple': [],
-			'reference_information_extracted_multiple': [],
-			'reference_strength_multiple': []
-		}
-		
-		for vt_item in settings["vibe_transfer"]:
-			vt_dict['reference_image_multiple'].append(vt_item['image'])
-			vt_dict['reference_information_extracted_multiple'].append(vt_item['information_extracted'])
-			vt_dict['reference_strength_multiple'].append(vt_item['strength'])
-		
-		json_construct['parameters'].update(vt_dict)
-	return [json_construct,settings["name"]]
 
 # 2. The primary function to generate images. Sends the request and will persist until it is fulfilled, then saves the image, and returns the path
 # Currently NAI specific
@@ -190,7 +114,8 @@ def image_gen(auth,prompt,filepath,enumerator,token_test=False):
 				print(f'[Warning] {response.status_code} | Server message: {json.loads(response.content)["message"]}')
 				return 'Error' # Reported above
 			elif response.status_code == 429:
-				raise ValueError('Server refused to respond with an image due to concurrent generation.')
+				print(f'[Warning] {response.status_code} | Server message: {json.loads(response.content)["message"]}')
+				raise ValueError('Server refused to respond with an image due to specific circumstances.')
 			elif response.status_code >= 402 and response.status_code < 500:
 				print(f'[Warning] {response.status_code} | Server message: {json.loads(response.content)["message"]}')
 				return 'Error' # Reported above
@@ -634,13 +559,13 @@ def create_image_stripe(subimages, stripe_width, line_height):
 # 7. Simply formats and passes the prompt to image_gen, used for simple generations, complex external logic or an auth token test
 @handle_exceptions
 def generate_as_is(settings,enumerator,token_test=False,token=''):
-	if token_test: #This is the raw testing dict used when evaluating whether a user token us usable or not
+	if token_test: #This is the raw testing dict used when evaluating whether a NAI user token us usable or not
 		settings = {'name': 'Test', 'folder_name': '', 'folder_name_extra': '', 'model': 'nai-diffusion-2', 'seed': 0, 'sampler': 'k_euler_ancestral', 'noise_schedule': 'native', 'scale': 10.0,
 			'steps': 1, 'img_mode': {'width': 64, 'height': 64}, 'prompt': 'Test', 'negative_prompt': 'Test', 'smea': False, 'dyn': False, 'dynamic_thresholding': False,
 			'dynamic_thresholding_mimic_scale': 10, 'dynamic_thresholding_percentile': 0.999, 'guidance_rescale': 0, 'negative_prompt_strength': 1}
-		GS.MAIN_APP.config_window.process_token_callback(image_gen(token,form_prompt(settings),'','',token_test=True), token)
+		GS.MAIN_APP.config_window.process_token_callback(image_gen(token,module_factory.providers[GS.MAIN_APP.generation_provider_button.text].form_prompt(settings),'','',token_test=True), token)
 		return
-	prompt=form_prompt(settings)
+	prompt=module_factory.providers[GS.MAIN_APP.generation_provider_button.text].form_prompt(settings)
 	filepath=TM.make_file_path(prompt,enumerator,settings["folder_name"],settings["folder_name_extra"])
 	if GS.verbose:
 		GS.last_fully_formed_prompt = prompt
@@ -1113,3 +1038,40 @@ def wipe_queue(instance=None):
 		entry.destructible = True
 	GS.MAIN_APP.pause_button.enabled = True
 	print('Task queue wiped')
+
+import importlib
+import inspect
+class ModuleFactory:
+	def __init__(self, provider_folder=GS.FULL_DIR + '/GenerationProviders'):
+		self.provider_folder = provider_folder
+		self.load_providers()
+
+	def load_providers(self):
+		self.providers = {}
+		for filename in os.listdir(self.provider_folder):
+			if filename.endswith(".py"):
+				provider_name = filename[:-3]
+				module_path = os.path.join(self.provider_folder, filename)
+				
+				spec = importlib.util.spec_from_file_location(provider_name, module_path)
+				module = importlib.util.module_from_spec(spec)
+				spec.loader.exec_module(module)
+				
+				# Look for a class that ends with 'Provider' in the module
+				provider_class = None
+				for name, obj in inspect.getmembers(module):
+					if inspect.isclass(obj) and name.endswith('Provider'):
+						provider_class = obj
+						break
+				
+				if provider_class:
+					self.providers[provider_name] = provider_class()
+				else:
+					print(f"Warning: No Provider class found in {filename}")
+
+	def get_provider(self, name):
+		return self.providers.get(name)
+
+	def list_providers(self):
+		return list(self.providers.keys())
+module_factory = ModuleFactory()

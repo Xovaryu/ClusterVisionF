@@ -151,7 +151,7 @@ class ClusterVisionF(App):
 		
 		
 		Window.clearcolor = GS.theme["ProgBg"]['value']
-		self.config_window = KW.ConfigWindow(title='Configure Settings')
+		self.config_window = KW.ConfigWindow(title=f'Configure Settings (Version: {GS.VERSION})')
 		self.theme_window = KW.ThemeWindow(title='Configure Theme')
 		self.file_handling_window = KW.FileHandlingWindow(title='File Handling (the f-strings here determine how the folder structure for created files look)')
 		self.drop_overlay = KW.DropOverlay() # This overlay uses the size_hints of the main layouts, so they need to be initialized first
@@ -170,12 +170,24 @@ class ClusterVisionF(App):
 		#mode_switcher_layout.add_widget(file_handling_button)
 		mode_switcher_layout.add_widget(drop_overlay_button)
 		mode_switcher_layout.add_widget(self.mode_switcher)
+
+		# Generation Providers
+		generation_provider_label = Label(text='Gen. Providers:', **l_row_size1)
+		self.generation_provider_import = KW.ImportButton(**imp_row_size1)
+		self.generation_provider_dropdown = DropDown()
+		self.generation_provider_button = KW.ScrollDropDownButton(self.generation_provider_dropdown, text='NovelAI Diffusion', size_hint=(1, None), size=(100, field_height))
+
+		for provider_name in IM_G.module_factory.list_providers():
+			btn = KW.DropDownEntryButton(text=provider_name, size_hint_y=None, height=field_height)
+			btn.bind(on_release=handle_exceptions(lambda btn: self.generation_provider_dropdown.select(btn.text)))
+			self.generation_provider_dropdown.add_widget(btn)
+		self.generation_provider_dropdown.bind(on_select=handle_exceptions(lambda instance, x: setattr(self.generation_provider_button, 'text', x)))
 	
 		# Name
 		name_label = Label(text='Name:', **l_row_size1)
 		self.name_import = KW.ImportButton(**imp_row_size1)
 		self.name_input = KW.ScrollInput(min_value=-100000, max_value=100000, fi_mode='hybrid_int', increment=1, multiline=False, size_hint=(1, None), size=(100, field_height))
-
+	
 		# Folder Name
 		folder_name_label = Label(text='Folder Name:', **l_row_size1)
 		self.folder_name_import = KW.ImportButton(**imp_row_size1)
@@ -444,6 +456,10 @@ class ClusterVisionF(App):
 		self.input_layout.add_widget(mode_label)
 		self.input_layout.add_widget(settings_button)
 		self.input_layout.add_widget(mode_switcher_layout)
+
+		self.input_layout.add_widget(generation_provider_label)
+		self.input_layout.add_widget(self.generation_provider_import)
+		self.input_layout.add_widget(self.generation_provider_button)
 
 		self.input_layout.add_widget(name_label)
 		self.input_layout.add_widget(self.name_import)

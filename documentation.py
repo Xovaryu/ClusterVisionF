@@ -135,6 +135,7 @@ Check the tooltip of any F-Input for more details on the variables.""",
 	'Image Deletion':
 """If clicked twice within 3 seconds this image will be deleted out of the program memory. It will not delete any images that were saved to or came in for first place from your system.""",
 }# Left to implement: Settings, Themes, Sampler, Decrisper (partially deprecated in NAID tho), Model, Name, Folder Name, Wait Time
+# API token stuff and in general the stuff in the settings window, further seed grid descriptions
 HELP_TEXT = """ClusterVisionF is a bit of a complicated and unusual UI, but most text fields and buttons have tooltips attached that will explain their function and possible hotkeys.
 Rightclick any such elements to see if they have something to say about themselves.
 Starting with CVF6 file imports work a little bit different, and CVF can handle a number of different files.

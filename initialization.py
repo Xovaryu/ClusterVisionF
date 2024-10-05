@@ -48,7 +48,7 @@ class GlobalState(EventDispatcher):
 	def __new__(cls):
 		if cls._instance is None:
 			cls._instance = super().__new__(cls)
-			cls._instance.VERSION = '6.0.0'
+			cls._instance.VERSION = '6.1.0'
 			cls._instance.MAIN_APP = None
 			cls._instance.FULL_DIR = full_dir
 			cls._instance.EXECUTOR = ThreadPoolExecutor()

@@ -24,6 +24,7 @@ import os
 import io
 import sys
 import ast
+import traceback
 from PIL import Image as PILImage
 import image_generator as IM_G
 import kivy_widgets as KW
@@ -444,7 +445,7 @@ def load_settings_from_image(file_path):
 				GS.MAIN_APP.model_button.text = 'safe-diffusion'
 			elif metadata["Source"] == 'Stable Diffusion F1022D28': # Anime Full V2
 				GS.MAIN_APP.model_button.text = 'nai-diffusion-2'
-			elif metadata["Source"] == 'Stable Diffusion XL C1E1DE52' or metadata["Source"] == 'Stable Diffusion XL 8BA2AF87': # Anime Full V3/Inpaint V3
+			elif metadata["Source"] == 'Stable Diffusion XL C1E1DE52' or metadata["Source"] == 'Stable Diffusion XL 8BA2AF87' or metadata["Source"] == 'Stable Diffusion XL 1120E6A9': # Anime Full V3/Inpaint V3
 				GS.MAIN_APP.model_button.text = 'nai-diffusion-3'
 			elif metadata["Source"] == 'Stable Diffusion XL 9CC2F394' or metadata["Source"] == 'Stable Diffusion XL C8704949': # Furry Full V3/Inpaint V3
 				GS.MAIN_APP.model_button.text = 'nai-diffusion-furry-3'
@@ -471,30 +472,31 @@ def load_settings_from_image(file_path):
 	if GS.MAIN_APP.sampler_import.enabled:
 		try_to_load('noise_schedule', GS.MAIN_APP.noise_schedule_button, comment_dict, 'noise_schedule', True, 'text', 'default')
 		try:
-			sampler_string = str(comment_dict["sampler"])
-		except:
-			traceback.print_exc()
-		if sampler_string == 'nai_smea_dyn':
-			GS.MAIN_APP.sampler_button.text = 'k_euler_ancestral'
-			GS.MAIN_APP.sampler_smea.enabled = True
-			GS.MAIN_APP.sampler_dyn.enabled = True
-		elif sampler_string == 'nai_smea':
-			GS.MAIN_APP.sampler_button.text = 'k_euler_ancestral'
-			GS.MAIN_APP.sampler_smea.enabled = True
-			GS.MAIN_APP.sampler_dyn.enabled = False
-		else:
-			GS.MAIN_APP.sampler_button.text = sampler_string
-			if comment_dict.get('sm_dyn'):
-				if comment_dict["sm_dyn"]:
+			sampler_string = comment_dict.get('sampler',False)
+			if sampler_string:
+				if sampler_string == 'nai_smea_dyn':
+					GS.MAIN_APP.sampler_button.text = 'k_euler_ancestral'
 					GS.MAIN_APP.sampler_smea.enabled = True
 					GS.MAIN_APP.sampler_dyn.enabled = True
-			elif comment_dict.get('sm'):
-				if comment_dict["sm"]:
+				elif sampler_string == 'nai_smea':
+					GS.MAIN_APP.sampler_button.text = 'k_euler_ancestral'
 					GS.MAIN_APP.sampler_smea.enabled = True
 					GS.MAIN_APP.sampler_dyn.enabled = False
-			else:
-				GS.MAIN_APP.sampler_smea.enabled = False
-				GS.MAIN_APP.sampler_dyn.enabled = False
+				else:
+					GS.MAIN_APP.sampler_button.text = sampler_string
+					if comment_dict.get('sm_dyn'):
+						if comment_dict["sm_dyn"]:
+							GS.MAIN_APP.sampler_smea.enabled = True
+							GS.MAIN_APP.sampler_dyn.enabled = True
+					elif comment_dict.get('sm'):
+						if comment_dict["sm"]:
+							GS.MAIN_APP.sampler_smea.enabled = True
+							GS.MAIN_APP.sampler_dyn.enabled = False
+					else:
+						GS.MAIN_APP.sampler_smea.enabled = False
+						GS.MAIN_APP.sampler_dyn.enabled = False
+		except:
+			traceback.print_exc()
 	if GS.MAIN_APP.decrisp_import.enabled:
 		try_to_load('dynamic_thresholding', GS.MAIN_APP.decrisp_button, comment_dict, 'dynamic_thresholding', True, 'enabled', False)
 		try_to_load('dynamic_thresholding_mimic_scale', GS.MAIN_APP.decrisp_guidance_input, comment_dict, 'dynamic_thresholding_mimic_scale', True, 'text')

@@ -2009,8 +2009,8 @@ class ImageGenerationEntry(BoxLayout):
 		self.i2i_middle_layout.add_widget(self.i2i_strength_input)
 		
 		self.lambdas.append(lambda: self.self_destruct())
-		self.destruct_button = ConfirmButton(self.lambdas[-1], text='X', size_hint_y=None, height=field_height, tooltip_types=['Image Deletion'])
-		self.i2i_noise_label = Label(text='Noise:', width=70, size_hint_x=None)
+		self.destruct_button = ConfirmButton(self.lambdas[-1], text='X', width=50, size_hint=(None,None), height=field_height, tooltip_types=['Image Deletion'])
+		self.i2i_noise_label = Label(text='Noise:', width=60, size_hint_x=None)
 		self.i2i_noise_input = FScrollInput(text=self.initial_settings[2], fi_mode='hybrid_float', min_value=0, max_value=1, size_hint_y=None, height=field_height, increment=0.1, tooltip_types=['Image2image Noise'])
 		
 		self.i2i_bottom_layout.add_widget(self.destruct_button)

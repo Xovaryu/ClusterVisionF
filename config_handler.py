@@ -85,8 +85,9 @@ NAI_UCS=[
 ]
 
 #This is the list of available NAI samplers
-NAI_SAMPLERS_RAW=['k_dpmpp_2m', 'k_euler_ancestral', 'k_heun', 'k_euler', 'k_dpm_2', 'k_dpm_2_ancestral', 'k_dpmpp_2s_ancestral', 'k_dpmpp_sde', 'k_dpm_fast', 'k_dpm_adaptive', 'ddim', 'k_lms',]
+NAI_SAMPLERS_RAW=['k_dpmpp_2m_sde', 'k_dpmpp_2m', 'k_euler_ancestral', 'k_heun', 'k_euler', 'k_dpm_2', 'k_dpm_2_ancestral', 'k_dpmpp_2s_ancestral', 'k_dpmpp_sde', 'k_dpm_fast', 'k_dpm_adaptive', 'ddim', 'k_lms',]
 NAI_SAMPLERS=[
+{{'name': 'DPM++ 2M SDE | Converging?', 'string': 'k_dpmpp_2m_sde, '}},
 {{'name': 'DPM++ 2M | Converging', 'string': 'k_dpmpp_2m, '}},
 {{'name': 'Euler Ancestral | Diverging', 'string': 'k_euler_ancestral, '}},
 {{'name': 'Heun', 'string': 'k_heun, '}},
@@ -103,14 +104,15 @@ NAI_SAMPLERS=[
 
 NAI_NOISE_SCHEDULERS=['default','native','karras','exponential','polyexponential']
 NAI_DEFAULT_NOISE_SCHEDULERS={{
+'k_euler': 'karras',
+'k_euler_ancestral': 'karras',
+'k_dpmpp_2s_ancestral': 'karras',
+'k_dpmpp_2m_sde': 'karras',
 'k_dpmpp_2m': 'exponential',
-'k_euler_ancestral': 'native',
+'k_dpmpp_sde': 'karras',
 'k_heun': 'exponential',
-'k_euler': 'native',
 'k_dpm_2': 'native',
 'k_dpm_2_ancestral': 'native',
-'k_dpmpp_2s_ancestral': 'native',
-'k_dpmpp_sde': 'exponential',
 'k_dpm_fast': 'native',
 'k_dpm_adaptive': 'native',
 'ddim': None,
@@ -120,7 +122,8 @@ NAI_DEFAULT_NOISE_SCHEDULERS={{
 
 #NAID uses these two vectors as standard quality tags
 NAI_PROMPT_CHUNKS=[
-{{'name': 'NAI Quality Tags', 'string': 'masterpiece, best quality, '}},
+{{'name': 'NAI Quality Tags (Old, prepended)', 'string': 'masterpiece, best quality, '}},
+{{'name': 'NAI Quality Tags (New, appended)', 'string': ', best quality, amazing quality, very aesthetic, absurdres'}}, 
 ]
 
 #These are the names used to address certain models
