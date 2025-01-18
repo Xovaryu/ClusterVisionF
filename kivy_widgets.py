@@ -39,8 +39,8 @@ kivy_widgets.py
 			This class makes the 3 mode buttons at the top of the GUI and tracks the state for other functions to use
 18.	SeedGrid
 			This is a complex class that creates a grid of text fields for seeds to be used in cluster collages
-19.	PromptGrid
-			Somewhat similar to above this is used for f-string prompts to allow splitting the text field for conveniences
+19.	FPrompt
+			This class handles the single f input and the according buttons
 20.	Console
 			A class made to expose console outputs right in the UI
 21.	ResolutionSelector
@@ -82,6 +82,7 @@ import kivy
 import json
 import time
 import webbrowser
+import math
 from PIL import Image as PILImage
 from PIL import ImageDraw as PILImageDraw
 import image_generator as IM_G
@@ -111,21 +112,16 @@ from kivy.uix.image import AsyncImage, Image
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.popup import Popup
 from kivy.uix.widget import Widget
-from kivy.properties import BooleanProperty, NumericProperty, ListProperty
+from kivy.properties import BooleanProperty, NumericProperty, ListProperty, ObjectProperty
 
 ###Provisory copy for now
 RESOLUTIONS = copy.deepcopy(GS.NAI_RESOLUTIONS)
 RESOLUTIONS.update(GS.USER_RESOLUTIONS)
 from kivy.core.text import LabelBase
-field_height=30
 font_hyper=20
 font_large=19
 font_small=15
 
-l_row_size1={'size_hint':(None, None),'size':(120, field_height)}
-l_row_size2={'size_hint':(None, 1),'size':(120, field_height)}
-imp_row_size1={'size_hint':(None, None),'size':(field_height, field_height)}
-imp_row_size2={'size_hint':(None, 1),'size':(field_height, field_height)}
 #Load in fonts
 LabelBase.register(name='Roboto', fn_regular=GS.FULL_DIR + 'Fonts/Roboto-Regular.ttf')
 #LabelBase.register(name='Symbola', fn_regular=GS.FULL_DIR + 'Fonts/Symbola.ttf')
@@ -658,6 +654,7 @@ class ComboCappedScrollInput(ScrollInput):
 		self.paired_field = paired_field
 		self.tooltip_types = ['Resolution Scroll-Input']
 		self.finalize_tooltip()
+		self.combo_cap = math.inf
 
 	@handle_exceptions
 	def on_focus(self, instance, value):
@@ -665,8 +662,8 @@ class ComboCappedScrollInput(ScrollInput):
 			# User has left the field
 			try:
 				value = self.fi_mode(self.text)
-				if value*int(self.paired_field.text)>3145728:
-					value = int(3145728 / int(self.paired_field.text))
+				if value*int(self.paired_field.text)>self.combo_cap:
+					value = int(self.combo_cap / int(self.paired_field.text))
 				if value % 64 != 0:
 					value = value - (value % 64)
 				if value < self.min_value or value == '':
@@ -685,7 +682,7 @@ class ComboCappedScrollInput(ScrollInput):
 			return
 		if touch.is_mouse_scrolling:
 			if touch.button == 'scrolldown':
-				if (int(self.text)+64)*int(self.paired_field.text)>3145728:
+				if (int(self.text)+64)*int(self.paired_field.text)>self.combo_cap:
 					pass
 				else:
 					self.text = str(round(min(self.fi_mode(self.text) + self.increment,self.max_value),self.round_value))
@@ -716,35 +713,40 @@ class SeedScrollInput(ScrollInput):
 		return super().keyboard_on_key_down(keyboard, keycode, text, modifiers)
 
 # 10. This is a widget to at least approximate the token cost of a prompt
-class TokenCostBar(BoxLayout):
-	@handle_exceptions
-	def __init__(self, clip_calculator, max_token_count, **kwargs):
-		super(TokenCostBar, self).__init__(**kwargs)
-		self.clip_calculator = clip_calculator
-		self.max_token_count = max_token_count
-		self.color_threshold = self.max_token_count / 2
-		self.token_cost = 0
-		self.bind(pos=self.update_rect, size=self.update_rect)
+class TokenCostBar(ToolTipBehavior, BoxLayout):
+	max_token_count = NumericProperty(1)
+	token_calculator = ObjectProperty()
 
 	@handle_exceptions
-	def update_rect(self, *args):
+	def __init__(self, associated_input, **kwargs):
+		super(TokenCostBar, self).__init__(tooltip_types = ['Token Cost Bar'], **kwargs)
+		self.token_cost = 0
+		self.bind(pos=self.update_rect, size=self.update_rect)
+		self.associated_input = associated_input
+		self.finalize_tooltip()
+
+	@handle_exceptions
+	def update_rect(self, f=None, *args):
+		if self.token_calculator:
+			text, f = TM.pre_tokenize(self.associated_input.text)
+			self.token_cost = self.token_calculator.calculate_token_cost(text)
 		self.canvas.before.clear()
 		with self.canvas.before:
 			Rectangle(pos=self.pos, size=self.size)
-			
 			# Draw a colored bar based on the token cost
-			if self.token_cost <= self.color_threshold:
-				color_value = self.token_cost / self.color_threshold
-				Color(0, 1, 0, 1)
-			else:
-				color_value = (self.token_cost - self.color_threshold) / self.color_threshold
-				Color(color_value, 1.0 - color_value, 0.0)
+			if f == True:
+				Color(0.8, 0, 1, 1)
+			elif f == False:
+				Color(self.token_cost / self.max_token_count, 1 - (self.token_cost / self.max_token_count), 0, 1)
 			bar_height = min(1, self.token_cost / self.max_token_count) * self.height
 			Rectangle(pos=self.pos, size=(self.width, bar_height))
 	
 	@handle_exceptions
-	def calculate_token_cost(self, instance, text):
-		self.token_cost = self.clip_calculator.calculate_token_cost(text)
+	def on_token_calculator(self, *args):
+		self.update_rect()
+
+	@handle_exceptions
+	def on_max_token_count(self, *args):
 		self.update_rect()
 
 # 11. A class for the big image preview
@@ -801,7 +803,7 @@ class DoubleEmojiButton(Button):
 class ImportButton(DoubleEmojiButton):
 	@handle_exceptions
 	def __init__(self, **kwargs):
-		super().__init__(symbol1='📥', symbol2='🚫', **kwargs)
+		super().__init__(symbol1='📥', symbol2='🚫', tooltip_types = ['Import Button'], **kwargs)
 class PauseButton(DoubleEmojiButton):
 	@handle_exceptions
 	def __init__(self, **kwargs):
@@ -846,16 +848,17 @@ class StateFButton(StateShiftButton):
 	def on_enabled(self, *args):
 		super(StateFButton, self).on_enabled(*args)
 		if self.enabled:
-			self.mode_switcher.hide_widgets(self.standard_widgets)
-			self.mode_switcher.unhide_widgets(self.f_widgets)
+			GS.hide_widgets(self.standard_widgets)
+			GS.unhide_widgets(self.f_widgets)
 			if not self.injector == None:
 				self.injector.target = self.f_target
 		else:
-			self.mode_switcher.unhide_widgets(self.standard_widgets)
-			self.mode_switcher.hide_widgets(self.f_widgets)
+			GS.unhide_widgets(self.standard_widgets)
+			GS.hide_widgets(self.f_widgets)
 			if not self.injector == None:
 				self.injector.target = self.standard_target
 
+"""
 # 15. These classes are for injector dropdowns, dropdowns that are attached to a field and can inject their values into it
 class InjectorDropDown(BoxLayout):
 	@handle_exceptions
@@ -864,8 +867,34 @@ class InjectorDropDown(BoxLayout):
 		self.orientation='vertical'
 		self.target=target
 		self.inject_identifier=inject_identifier
+		self.dropdown = DropDown(auto_width=False,size_hint=(1, None)) # Here we make sure that the dropdown uses the whole window
+		dropdown_button = Button(text=button_text, size_hint=(None, 1), width=GS.UI_field_height, height=GS.UI_field_height*2)
+		dropdown_button.bind(on_release=handle_exceptions(lambda *args: self.dropdown.open(dropdown_button)))
+		# Update the dropdown button text when an item is selected
+		self.dropdown.bind(on_select=handle_exceptions(lambda instance, x: setattr(dropdown_button, 'text', x)))
+		self.add_widget(dropdown_button)
+
+	@handle_exceptions
+	def copy_to_clipboard(self, string, item_layout):
+		Clipboard.copy(string)
+
+	@handle_exceptions
+	def prepend_to_text_box(self, string, item_layout):
+		self.target.text = string + self.target.text
+
+	@handle_exceptions
+	def append_to_text_box(self, string, item_layout):
+		self.target.text += string
+
+class InjectorDropDownDeprecated(BoxLayout):
+	@handle_exceptions
+	def __init__(self, dropdown_list=[], button_text='', target=None, inject_identifier='P', **kwargs):
+		super().__init__(**kwargs)
+		self.orientation='vertical'
+		self.target=target
+		self.inject_identifier=inject_identifier
 		self.dropdown = DropDown(auto_width=False,size_hint=(1, None)) # Here me make sure that the dropdown uses the whole window
-		dropdown_button = Button(text=button_text, size_hint=(None, 1), width=field_height, height=field_height*2)
+		dropdown_button = Button(text=button_text, size_hint=(None, 1), width=GS.UI_field_height, height=GS.UI_field_height*2)
 		dropdown_button.bind(on_release=handle_exceptions(lambda *args: self.dropdown.open(dropdown_button)))
 		# Update the dropdown button text when an item is selected
 		self.dropdown.bind(on_select=handle_exceptions(lambda instance, x: setattr(dropdown_button, 'text', x)))
@@ -885,15 +914,15 @@ class InjectorDropDown(BoxLayout):
 			texture_size=handle_exceptions(lambda *args, item_label=item_label: item_label.setter('height')(item_label, item_label.texture_size[1]))
 		)
 		# Create a box layout for the item
-		item_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=field_height*2)
+		item_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height*2)
 		# Create a button to copy the string to the clipboard
-		copy_button = Button(text='Copy', font_size=font_large, size_hint=(None, None), width=50, height=field_height*2)
-		copy_button.bind(on_release=handle_exceptions(lambda *args, item_string=item_string, item_layout=item_layout: self.copy_to_clipboard(item_string, item_layout)))
+		copy_button = Button(text='Copy', font_size=font_large, size_hint=(None, None), width=50, height=GS.UI_field_height*2)
+		copy_button.bind(on_release=handle_exceptions(lambda *args, item_string=item_string, item_layout=item_layout: Clipboard.copy(item_string)))
 		# Create a button to prepend the string to the text box
-		prepend_button = Button(text='>' + self.inject_identifier, font_size=font_large, size_hint=(None, None), width=50, height=field_height*2)
+		prepend_button = Button(text='>' + self.inject_identifier, font_size=font_large, size_hint=(None, None), width=50, height=GS.UI_field_height*2)
 		prepend_button.bind(on_release=handle_exceptions(lambda *args, item_string=item_string, item_layout=item_layout: self.prepend_to_text_box(item_string, item_layout)))
 		# Create a button to append the string to the text box
-		append_button = Button(text=self.inject_identifier + '<', font_size=font_large, size_hint=(None, None), width=50, height=field_height*2)
+		append_button = Button(text=self.inject_identifier + '<', font_size=font_large, size_hint=(None, None), width=50, height=GS.UI_field_height*2)
 		append_button.bind(on_release=handle_exceptions(lambda *args, item_string=item_string, item_layout=item_layout: self.append_to_text_box(item_string, item_layout)))
 		item_layout.add_widget(copy_button)
 		item_layout.add_widget(prepend_button)
@@ -902,10 +931,6 @@ class InjectorDropDown(BoxLayout):
 		# Add the item layout to the dropdown
 		self.dropdown.add_widget(item_layout)
 		return item_layout, item_string
-
-	@handle_exceptions
-	def copy_to_clipboard(self, string, item_layout):
-		Clipboard.copy(string)
 
 	@handle_exceptions
 	def prepend_to_text_box(self, string, item_layout):
@@ -924,8 +949,8 @@ class SamplerInjectorDropDown(InjectorDropDown):
 	def add_button(self, item, *args):
 		item_layout, item_string = super(SamplerInjectorDropDown, self).add_button(item, *args)
 		if not (item_string == 'ddim' or item_string == 'plms'):
-			sampler_smea = StateShiftButton(text='SMEA', size_hint=(None, 1), size=(70,field_height))
-			sampler_dyn = StateShiftButton(text='Dyn', size_hint=(None, 1), size=(70,field_height))
+			sampler_smea = StateShiftButton(text='SMEA', size_hint=(None, 1), size=(70,GS.UI_field_height))
+			sampler_dyn = StateShiftButton(text='Dyn', size_hint=(None, 1), size=(70,GS.UI_field_height))
 
 			sampler_smea.bind(enabled=handle_exceptions(lambda instance, value: on_smea_disabled(value, sampler_dyn)))
 			sampler_dyn.bind(enabled=handle_exceptions(lambda instance, value: on_dyn_enabled(value, sampler_smea)))
@@ -956,7 +981,7 @@ class SamplerInjectorDropDown(InjectorDropDown):
 			elif item_layout.children[2].enabled: #SMEA
 				string += '_smea'
 		return string + ', '
-
+"""
 # 16. A slightly more advanced dropdown button that allows scrolling values without opening the dropdown
 class ScrollDropDownBehavior(object):
 	@handle_exceptions
@@ -973,19 +998,35 @@ class ScrollDropDownBehavior(object):
 			return
 		if touch.is_mouse_scrolling:
 			if touch.button == 'scrolldown' or touch.button == 'scrollup':
+				def is_hidden(widget):
+					return widget.opacity == 0 and widget.height == 0 and widget.width == 0
+				
 				self.children = self.get_children_func()
 				current_index = 0
+				
+				# Find current index
 				for i, child in enumerate(self.children):
 					if child.text == self.text:
 						current_index = i
 						break
-			if touch.button == 'scrolldown':
-				# Get next index dropdown list
-				index = (current_index + 1) % len(self.children)
-			elif touch.button == 'scrollup':
-				# Get previous index dropdown list
-				index = (current_index - 1) % len(self.children)
-			self.set_state_func(index)
+				
+				# Set initial target index
+				if touch.button == 'scrolldown':
+					index = (current_index + 1) % len(self.children)
+				else:  # scrollup
+					index = (current_index - 1) % len(self.children)
+				
+				# Keep looking until we find a visible widget or wrap around
+				original_index = index
+				while is_hidden(self.children[index]):
+					if touch.button == 'scrolldown':
+						index = (index + 1) % len(self.children)
+					else:
+						index = (index - 1) % len(self.children)
+					if index == original_index:  # We've wrapped around completely
+						return super().on_touch_down(touch)
+				self.set_state_func(index)
+		
 		return super().on_touch_down(touch)
 class ScrollDropDownButton(ScrollDropDownBehavior, Button):
 	pass
@@ -1034,8 +1075,8 @@ class ModeSwitcher(BoxLayout):
 			return
 		self.cc_active, self.is_active, self.cs_active = True, False, False
 		self.update_state_color(None)
-		self.unhide_widgets(self.app.cc_exclusive_widgets)
-		self.hide_widgets(self.app.is_exclusive_widgets)
+		GS.unhide_widgets(self.app.cc_exclusive_widgets)
+		GS.hide_widgets(self.app.is_exclusive_widgets)
 
 	@handle_exceptions
 	def switch_is(self, f):
@@ -1043,8 +1084,8 @@ class ModeSwitcher(BoxLayout):
 			return
 		self.cc_active, self.is_active, self.cs_active = False, True, False
 		self.update_state_color(None)
-		self.unhide_widgets(self.app.is_exclusive_widgets)
-		self.hide_widgets(self.app.cc_exclusive_widgets)
+		GS.unhide_widgets(self.app.is_exclusive_widgets)
+		GS.hide_widgets(self.app.cc_exclusive_widgets)
 
 	@handle_exceptions
 	def switch_cs(self, f):
@@ -1052,44 +1093,9 @@ class ModeSwitcher(BoxLayout):
 			return
 		self.cc_active, self.is_active, self.cs_active = False, False, True
 		self.update_state_color(None)
-		self.unhide_widgets(self.app.is_exclusive_widgets+self.app.cc_exclusive_widgets)
-		self.hide_widgets(self.app.non_cs_widgets)
-	
-	# These functions hide and unhide widgets
-	@handle_exceptions
-	def hide_widgets(self, widgets):
-		for widget in widgets:
-			if widget.opacity != 0 and widget.height != 0 and widget.width != 0:
-				widget.ori_opacity = widget.opacity
-				widget.ori_height = widget.height
-				widget.ori_width = widget.width
-				widget.ori_size_hint_y = widget.size_hint_y
-				widget.ori_size_hint_x = widget.size_hint_x
-				widget.opacity = 0
-				widget.height = 0
-				widget.width = 0
-				widget.size_hint_y = None
-				widget.size_hint_x = None
-				
-				widget.ori_children = widget.children[::-1]
-				widget.clear_widgets()
+		GS.unhide_widgets(self.app.is_exclusive_widgets+self.app.cc_exclusive_widgets)
+		GS.hide_widgets(self.app.non_cs_widgets)
 
-	@handle_exceptions
-	def unhide_widgets(self, widgets):
-		try:
-			for widget in widgets:
-				widget.opacity = widget.ori_opacity
-				widget.height = widget.ori_height
-				widget.width = widget.ori_width
-				widget.size_hint_y = widget.ori_size_hint_y
-				widget.size_hint_x = widget.ori_size_hint_x
-				
-				widget.clear_widgets()
-				for child in widget.ori_children:
-					widget.add_widget(child)
-		except:
-			pass
-	
 	@handle_exceptions
 	def update_state_color(self, instance):
 		self.cc_button.background_color = GS.theme["SBtnBgOn"]["value"] if self.cc_active else GS.theme["SBtnBgOff"]["value"]
@@ -1098,43 +1104,46 @@ class ModeSwitcher(BoxLayout):
 		self.cc_button.color, self.is_button.color, self.cs_button.color = GS.theme["SBtnText"]["value"], GS.theme["SBtnText"]["value"], GS.theme["SBtnText"]["value"]
 
 # 18. SeedGrid class for seed grids when making cluster collages
-class SeedGrid(GridLayout):
+class SeedGrid(BoxLayout):
 	@handle_exceptions
-	def __init__(self, **kwargs):
+	def __init__(self, layout=False, **kwargs):
 		super(SeedGrid, self).__init__(**kwargs)
-		self.cols=2
+		self.orientation = 'horizontal'
+		self.layout = layout
 		self.seed_inputs = []
-		self.cc_seed_grid = GridLayout(cols=3, size_hint=(1, 1), size=(100, field_height*4))
+		self.height = GS.UI_field_height*4
+		self.cc_seed_grid = GridLayout(cols=3, size_hint=(1, None), size=(100, GS.UI_field_height*4))
 		
-		self.seed_cols_input = ScrollInput(text='3', size_hint=(1, None), width=60, height=field_height)
-		self.seed_rows_input = ScrollInput(text='3', size_hint=(1, None), width=60, height=field_height)
-		self.seed_mult_label = Label(text='×', size_hint=(None, None), width=20, height=field_height)
-		self.dim_input_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=field_height)
+		self.seed_cols_input = ScrollInput(text='3', size_hint=(1, None), width=60, height=GS.UI_field_height)
+		self.seed_rows_input = ScrollInput(text='3', size_hint=(1, None), width=60, height=GS.UI_field_height)
+		self.seed_mult_label = Label(text='×', size_hint=(None, None), width=20, height=GS.UI_field_height)
+		self.dim_input_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=GS.UI_field_height)
 		self.dim_input_layout.add_widget(self.seed_cols_input)
 		self.dim_input_layout.add_widget(self.seed_mult_label)
 		self.dim_input_layout.add_widget(self.seed_rows_input)
 		self.seed_cols_input.bind(text=self.adjust_grid_size)
 		self.seed_rows_input.bind(text=self.adjust_grid_size)
 
-		self.btn1 = Button(text='Randomize', size_hint=(1, None), size=(100, field_height))
+		self.btn1 = Button(text='Randomize', size_hint=(1, None), size=(100, GS.UI_field_height))
 		self.btn1.bind(on_release=handle_exceptions(lambda btn: self.randomize()))
-		self.btn2 = Button(text='Clear', size_hint=(1, None), size=(100, field_height))
+		self.btn2 = Button(text='Clear', size_hint=(1, None), size=(100, GS.UI_field_height))
 		self.btn2.bind(on_release=handle_exceptions(lambda btn: self.clear()))
-		self.btn3 = Button(text='Load List', size_hint=(1, None), size=(100, field_height))
+		self.btn3 = Button(text='Load List', size_hint=(1, None), size=(100, GS.UI_field_height))
 
 		# create label for the multiplication sign between width and height
 		self.seed_list_dropdown = DropDown()
 		self.btn3.bind(on_release=self.seed_list_dropdown.open)
 		for seed_list in GS.SEED_LISTS:
-			btn = DropDownEntryButton(text=seed_list["name"], size_hint_y=None, height=field_height)
+			btn = DropDownEntryButton(text=seed_list["name"], size_hint_y=None, height=GS.UI_field_height)
 			btn.bind(on_release=handle_exceptions(lambda btn, seed_list=seed_list: (self.load_seeds(seed_list["seeds"]), self.seed_list_dropdown.dismiss())))
 			self.seed_list_dropdown.add_widget(btn)
 		
-		self.btn_grid = GridLayout(cols=1, size_hint=(None, 1))
+		self.btn_grid = BoxLayout(orientation='vertical', size_hint=(None, 1), height=GS.UI_field_height*4)
 		self.btn_grid.add_widget(self.dim_input_layout)
 		self.btn_grid.add_widget(self.btn1)
 		self.btn_grid.add_widget(self.btn2)
 		self.btn_grid.add_widget(self.btn3)
+		self.btn_grid.add_widget(BoxLayout(orientation='vertical', size_hint=(1, 1)))
 
 		self.add_widget(self.btn_grid)
 		self.add_widget(self.cc_seed_grid)
@@ -1147,7 +1156,8 @@ class SeedGrid(GridLayout):
 			return
 		# calculate the number of rows and columns needed to fit all the inputs
 		num_inputs = int(self.seed_rows_input.text) * int(self.seed_cols_input.text)
-
+		if self.layout:
+			self.layout.height = self.height = self.cc_seed_grid.height = max(4, int(self.seed_rows_input.text)) * GS.UI_field_height
 		# adjust the size of the grid
 		self.cc_seed_grid.cols = int(self.seed_cols_input.text)
 
@@ -1157,7 +1167,7 @@ class SeedGrid(GridLayout):
 
 		# add any missing input widgets
 		while len(self.seed_inputs) < num_inputs:
-			seed_input = SeedScrollInput(text='', min_value=0, max_value=4294967295, increment=1000, multiline=False, font_size=font_small, allow_empty=True, fi_mode=int)
+			seed_input = SeedScrollInput(text='', min_value=0, max_value=4294967295, increment=1000, multiline=False, font_size=font_small, allow_empty=True, fi_mode=int, size_hint_y=None, height=GS.UI_field_height)
 			self.seed_inputs.append(seed_input)
 			self.cc_seed_grid.add_widget(seed_input)
 
@@ -1183,81 +1193,33 @@ class SeedGrid(GridLayout):
 			if isinstance(widget, TextInput):
 				widget.text = ''
 
-# 19. PromptGrid class for the use of f-strings in prompting
-class PromptGrid(GridLayout):
+# 19. FPrompt class for the use of f-strings in prompting
+class FPrompt(BoxLayout):
 	@handle_exceptions
-	def __init__(self, tooltip_types='Prompt', **kwargs):
+	def __init__(self, tooltip_types=['Prompt'], **kwargs):
 		super().__init__(**kwargs)
-		self.rows = 1
-		self.prompt_rows = 1
-		self.prompt_inputs = []
-		self.prompt_eval_list = BoxLayout(orientation='vertical', size_hint=(1, 1), size=(100, field_height*4))
-		self.btn1 = Button(text='Row+', size_hint=(1, None), size=(100, field_height))
-		self.btn1.bind(on_release=handle_exceptions(lambda btn: self.on_increase_rows()))
-		self.btn2 = Button(text='Row-', size_hint=(1, None), size=(100, field_height))
-		self.btn2.bind(on_release=handle_exceptions(lambda btn: self.on_decrease_rows()))
-		self.btn3 = Button(text='Copy ⁅⁆', size_hint=(1, None), size=(100, field_height))
-		self.btn3.bind(on_release=handle_exceptions(lambda btn: Clipboard.copy('⁅⁆')))
+		self.orientation = 'horizontal'
+		self.input = FTextInput(multiline=True, text='', tooltip_types=tooltip_types)
+		self.prompt_eval_list = BoxLayout(orientation='vertical', size_hint=(1, 1), size=(100, GS.UI_field_height*4))
+		self.btn1 = Button(text='Copy ⁅⁆', size_hint=(1, None), size=(100, GS.UI_field_height))
+		self.btn1.bind(on_release=handle_exceptions(lambda btn: Clipboard.copy('⁅⁆')))
+		self.btn1.font_name = 'Unifont'
+		self.btn2 = Button(text='Inject ⁅⁆', size_hint=(1, None), size=(100, GS.UI_field_height))
+		self.btn2.bind(on_release=handle_exceptions(lambda btn: setattr(self.input, 'text', self.input.text+'⁅⁆')))
+		self.btn2.font_name = 'Unifont'
+		self.btn3 = Button(text='Inject ⁅Seq.⁆', size_hint=(1, None), size=(100, GS.UI_field_height))
+		self.btn3.bind(on_release=handle_exceptions(lambda btn: setattr(self.input, 'text', self.input.text+'''⁅'♥‼¡'*n⁆''')))
 		self.btn3.font_name = 'Unifont'
-		self.btn4 = Button(text='Inject ⁅⁆', size_hint=(1, None), size=(100, field_height))
-		self.btn4.bind(on_release=handle_exceptions(lambda btn: setattr(self.prompt_inputs[0], 'text', self.prompt_inputs[0].text+'⁅⁆')))
+		self.btn4 = Button(text='Inject ⁅List⁆', size_hint=(1, None), size=(100, GS.UI_field_height))
+		self.btn4.bind(on_release=handle_exceptions(lambda btn: setattr(self.input, 'text', self.input.text+'''⁅['0','1','...'][n]⁆''')))
 		self.btn4.font_name = 'Unifont'
-		self.btn5 = Button(text='Inject ⁅Seq.⁆', size_hint=(1, None), size=(100, field_height))
-		self.btn5.bind(on_release=handle_exceptions(lambda btn: setattr(self.prompt_inputs[0], 'text', self.prompt_inputs[0].text+'''⁅'♥‼¡'*n⁆''')))
-		self.btn5.font_name = 'Unifont'
-		self.btn6 = Button(text='Inject ⁅List⁆', size_hint=(1, None), size=(100, field_height))
-		self.btn6.bind(on_release=handle_exceptions(lambda btn: setattr(self.prompt_inputs[0], 'text', self.prompt_inputs[0].text+'''⁅['0','1','...'][n]⁆''')))
-		self.btn6.font_name = 'Unifont'
-		self.btn_grid = GridLayout(cols=1, size_hint=(None, 1), width=115)
+		self.btn_grid = BoxLayout(orientation = 'vertical', size_hint=(None, 1), width=115)
 		self.btn_grid.add_widget(self.btn1)
 		self.btn_grid.add_widget(self.btn2)
 		self.btn_grid.add_widget(self.btn3)
 		self.btn_grid.add_widget(self.btn4)
-		self.btn_grid.add_widget(self.btn5)
-		self.btn_grid.add_widget(self.btn6)
 		self.add_widget(self.btn_grid)
-		self.add_widget(self.prompt_eval_list)
-		
-		self.adjust_grid_size(1)
-
-	@handle_exceptions
-	def adjust_grid_size(self, rows):
-		self.prompt_rows = rows
-		# retain the text of the existing inputs
-		prompt_input_texts = [input.text for input in self.prompt_inputs]
-		self.prompt_inputs.clear()
-		self.prompt_eval_list.clear_widgets()
-		for i in range(rows):
-			prompt_input = FTextInput(multiline=True, text='⁅⁆', tooltip_types=['Prompt'])
-			prompt_input.font_size = 23
-			prompt_input.font_name = 'Unifont'
-			if i < len(prompt_input_texts):
-				prompt_input.text = prompt_input_texts[i]
-			self.prompt_inputs.append(prompt_input)
-			self.prompt_eval_list.add_widget(prompt_input)
-
-	@handle_exceptions
-	def load_prompts(self, prompts):
-		try:
-			self.adjust_grid_size(len(prompts))
-			for i in range(len(prompts)):
-				prompt_str = str(prompts[i])
-				if prompt_str.startswith('''['f"""''') and prompt_str.endswith('''"""']'''): # Legacy format - strip the `['f"""` and `"""]`
-					self.prompt_inputs[i].text = prompt_str[6:-5].replace("\\'", "'")
-				else:
-					self.prompt_inputs[i].text = prompt_str
-		except:
-			traceback.print_exc()
-
-	@handle_exceptions
-	def on_increase_rows(self):
-		rows = min(self.prompt_rows + 1, 5)
-		self.adjust_grid_size(rows)
-
-	@handle_exceptions
-	def on_decrease_rows(self):
-		rows = max(self.prompt_rows - 1, 1)
-		self.adjust_grid_size(rows)
+		self.add_widget(self.input)
 
 # 20. In order to use the previous generation metadata, this class replicates a functional read-only console
 class Console(BoxLayout):
@@ -1378,31 +1340,31 @@ class Console(BoxLayout):
 class ResolutionSelector(BoxLayout):
 	@handle_exceptions
 	def __init__(self, **kwargs):
-		super().__init__(orientation='horizontal', size_hint=(1, None), height=field_height, **kwargs)
+		super().__init__(orientation='horizontal', size_hint=(1, None), height=GS.UI_field_height, **kwargs)
 		
 		# Create width and height input fields for custom resolution
-		self.resolution_width = ComboCappedScrollInput(text='1024', increment=64, min_value=64, max_value=49152,
-													 size_hint=(1, None), width=60, height=field_height)
-		self.resolution_height = ComboCappedScrollInput(text='1024', increment=64, min_value=64, max_value=49152, paired_field=self.resolution_width, 
-													  size_hint=(1, None), width=60, height=field_height)
+		self.resolution_width = ComboCappedScrollInput(text='1024', increment=64, min_value=64, max_value=math.inf,
+													 size_hint=(1, None), width=60, height=GS.UI_field_height)
+		self.resolution_height = ComboCappedScrollInput(text='1024', increment=64, min_value=64, max_value=math.inf, paired_field=self.resolution_width, 
+													  size_hint=(1, None), width=60, height=GS.UI_field_height)
 		self.resolution_width.paired_field = self.resolution_height
 
 		# create label for the multiplication sign between width and height
-		resolution_mult_label = Label(text='×', size_hint=(None, None), width=20, height=field_height)
+		resolution_mult_label = Label(text='×', size_hint=(None, None), width=20, height=GS.UI_field_height)
 
 		# create dropdown button for selecting image mode
-		self.resolution_menu_button = Button(text='SquareNormal', size_hint=(None, None), width=150, height=field_height)
+		self.resolution_menu_button = Button(text='SquareNormal', size_hint=(None, None), width=150, height=GS.UI_field_height)
 
 		# create dropdown menu for image modes
 		img_dropdown = DropDown()
 		
 		# create button for each category
 		for category, modes in RESOLUTIONS.items():
-			category_label = BgLabel(text=category, size_hint_y=None, height=field_height)
+			category_label = BgLabel(text=category, size_hint_y=None, height=GS.UI_field_height)
 			img_dropdown.add_widget(category_label)
 			# create button for each mode in category
 			for mode in modes:
-				img_button = DropDownEntryButton(text=mode, size_hint_y=None, height=field_height)
+				img_button = DropDownEntryButton(text=mode, size_hint_y=None, height=GS.UI_field_height)
 				img_button.bind(on_release=handle_exceptions(lambda img_button: self.set_size(img_button.text, self.resolution_width,
 																			  self.resolution_height, img_dropdown)))
 				img_dropdown.add_widget(img_button)
@@ -1464,26 +1426,26 @@ class FileHandlingWindow(Popup):
 		content = BoxLayout(orientation='vertical')
 		
 		images_layout = BoxLayout(orientation='horizontal')
-		images_label = Label(text='Images:', size_hint=(None,None), size=(130,field_height))
-		self.images_input = TextInput(text = "placeholder 1", multiline=True, size_hint=(1, None), size=(100, field_height*3))
+		images_label = Label(text='Images:', size_hint=(None,None), size=(130,GS.UI_field_height))
+		self.images_input = TextInput(text = "placeholder 1", multiline=True, size_hint=(1, None), size=(100, GS.UI_field_height*3))
 		images_layout.add_widget(images_label)
 		images_layout.add_widget(self.images_input)
 		
 		videos_layout = BoxLayout(orientation='horizontal')
-		videos_label = Label(text='Videos:', size_hint=(None,None), size=(130,field_height))
-		self.videos_input = TextInput(text = "placeholder 2", multiline=True, size_hint=(1, None), size=(100, field_height*3))
+		videos_label = Label(text='Videos:', size_hint=(None,None), size=(130,GS.UI_field_height))
+		self.videos_input = TextInput(text = "placeholder 2", multiline=True, size_hint=(1, None), size=(100, GS.UI_field_height*3))
 		videos_layout.add_widget(videos_label)
 		videos_layout.add_widget(self.videos_input)
 		
 		cc_layout = BoxLayout(orientation='horizontal')
-		cc_label = Label(text='Cluster Collages:', size_hint=(None,1), size=(130,field_height))
-		self.cc_input = TextInput(text = "placeholder 3", multiline=True, size_hint=(1, None), size=(100, field_height*3))
+		cc_label = Label(text='Cluster Collages:', size_hint=(None,1), size=(130,GS.UI_field_height))
+		self.cc_input = TextInput(text = "placeholder 3", multiline=True, size_hint=(1, None), size=(100, GS.UI_field_height*3))
 		cc_layout.add_widget(cc_label)
 		cc_layout.add_widget(self.cc_input)
 		
 		settings_layout = BoxLayout(orientation='horizontal')
-		settings_label = Label(text='Settings:', size_hint=(None,None), size=(130,field_height))
-		self.settings_input = TextInput(text = "placeholder 4", multiline=True, size_hint=(1, None), size=(100, field_height*3))
+		settings_label = Label(text='Settings:', size_hint=(None,None), size=(130,GS.UI_field_height))
+		self.settings_input = TextInput(text = "placeholder 4", multiline=True, size_hint=(1, None), size=(100, GS.UI_field_height*3))
 		settings_layout.add_widget(settings_label)
 		settings_layout.add_widget(self.settings_input)
 		
@@ -1553,50 +1515,50 @@ AUTH='{token}'
 		# Set up and add all the elements for the theme configurator
 		layout = BoxLayout(orientation='vertical')
 		
-		user_settings_label = Label(text='User Settings:', size_hint=(1,None), size=(100,field_height), font_size=font_hyper)
+		user_settings_label = Label(text='User Settings:', size_hint=(1,None), size=(100,GS.UI_field_height), font_size=font_hyper)
 		
-		creator_name_label = Label(text='Creator name:', size_hint=(None,None), size=(300,field_height))
-		creator_name_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=field_height)
-		self.creator_name_input = TextInput(text=GS.CREATOR_NAME, multiline=False, size_hint=(1,None), height=field_height)
+		creator_name_label = Label(text='Creator name:', size_hint=(None,None), size=(300,GS.UI_field_height))
+		creator_name_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
+		self.creator_name_input = TextInput(text=GS.CREATOR_NAME, multiline=False, size_hint=(1,None), height=GS.UI_field_height)
 		creator_name_layout.add_widget(creator_name_label)
 		creator_name_layout.add_widget(self.creator_name_input)
 		
 		# Set up and add all the necessary elements for token handling
-		token_button = Button(text='Set NovelAI token (DO NOT SHARE):', on_release=self.process_token, size_hint=(None,None), size=(300,field_height))
-		self.token_state = BgLabel(font_name='NotoEmoji', text='❔', size_hint=(None,None), size=(field_height,field_height), register_to = None)
-		token_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=field_height)
-		self.token_input = TextInput(text=GS.AUTH, multiline=False, size_hint=(1,None), size=(100+field_height,field_height))
+		token_button = Button(text='Set NovelAI token (DO NOT SHARE):', on_release=self.process_token, size_hint=(None,None), size=(300,GS.UI_field_height))
+		self.token_state = BgLabel(font_name='NotoEmoji', text='❔', size_hint=(None,None), size=(GS.UI_field_height,GS.UI_field_height), register_to = None)
+		token_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
+		self.token_input = TextInput(text=GS.AUTH, multiline=False, size_hint=(1,None), size=(100+GS.UI_field_height,GS.UI_field_height))
 		token_layout.add_widget(token_button)
 		token_layout.add_widget(self.token_state)
 		token_layout.add_widget(self.token_input)
 		
-		spacer_layout_1 = BoxLayout(orientation='horizontal', size_hint_y=None, height=field_height)
-		generation_settings_label = Label(text='Generation Settings:', size_hint=(1,None), size=(100,field_height), font_size=font_hyper)
+		spacer_layout_1 = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
+		generation_settings_label = Label(text='Generation Settings:', size_hint=(1,None), size=(100,GS.UI_field_height), font_size=font_hyper)
 				
-		history_length_label = Label(text='Generation history length:', size_hint=(None,None), size=(300,field_height))
-		history_length_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=field_height)
-		self.history_length_input = ScrollInput(text='50', multiline=False, max_value=100000, size_hint=(1,None), height=field_height)
+		history_length_label = Label(text='Generation history length:', size_hint=(None,None), size=(300,GS.UI_field_height))
+		history_length_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
+		self.history_length_input = ScrollInput(text='50', multiline=False, max_value=100000, size_hint=(1,None), height=GS.UI_field_height)
 		history_length_layout.add_widget(history_length_label)
 		history_length_layout.add_widget(self.history_length_input)
 		
-		skip_button = StateShiftButton(text='Skip Generation',on_release=handle_exceptions(lambda instance: setattr(GS, 'generate_images', not GS.generate_images)), size_hint=(1,None), size=(100,field_height))
+		skip_button = StateShiftButton(text='Skip Generation',on_release=handle_exceptions(lambda instance: setattr(GS, 'generate_images', not GS.generate_images)), size_hint=(1,None), size=(100,GS.UI_field_height))
 		
-		vid_params_label = Label(text='vid_params = ', size_hint=(None,None), size=(100,field_height))
-		self.vid_params_input = TextInput(text = "{'fps': 10,'codec': 'vp9','pixelformat': 'yuvj444p',}", multiline=False, size_hint=(1, None), size=(100, field_height))
-		vid_params_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=field_height)
+		vid_params_label = Label(text='vid_params = ', size_hint=(None,None), size=(100,GS.UI_field_height))
+		self.vid_params_input = TextInput(text = "{'fps': 10,'codec': 'vp9','pixelformat': 'yuvj444p',}", multiline=False, size_hint=(1, None), size=(100, GS.UI_field_height))
+		vid_params_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
 		vid_params_layout.add_widget(vid_params_label)
 		vid_params_layout.add_widget(self.vid_params_input)
 		
-		eval_guard_label = Label(text='f-strings are evaluated in guarded mode', size_hint=(1,None), size=(100,field_height))
-		self.eval_guard_button = DoubleEmojiButton(symbol1='🔰️', symbol2='⚠️',on_release=handle_exceptions(lambda eval_guard_button: self.switch_eval_behavior(eval_guard_button,eval_guard_label)),size_hint=(None,None), size=(field_height,field_height))
-		eval_guard_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=field_height)
+		eval_guard_label = Label(text='f-strings are evaluated in guarded mode', size_hint=(1,None), size=(100,GS.UI_field_height))
+		self.eval_guard_button = DoubleEmojiButton(symbol1='🔰️', symbol2='⚠️',on_release=handle_exceptions(lambda eval_guard_button: self.switch_eval_behavior(eval_guard_button,eval_guard_label)),size_hint=(None,None), size=(GS.UI_field_height,GS.UI_field_height))
+		eval_guard_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
 		eval_guard_layout.add_widget(self.eval_guard_button)
 		eval_guard_layout.add_widget(eval_guard_label)
 		
-		spacer_layout_2 = BoxLayout(orientation='horizontal', size_hint_y=None, height=field_height)
-		misc_settings_label = Label(text='Misc Settings:', size_hint=(1,None), size=(100,field_height), font_size=font_hyper)
+		spacer_layout_2 = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
+		misc_settings_label = Label(text='Misc Settings:', size_hint=(1,None), size=(100,GS.UI_field_height), font_size=font_hyper)
 		
-		self.copy_error_button = Button(text='Copy last error to clipboard', on_release=handle_exceptions(lambda btn: Clipboard.copy(GS.last_error)), size_hint=(1,None), size=(100,field_height), disabled=True)
+		self.copy_error_button = Button(text='Copy last error to clipboard', on_release=handle_exceptions(lambda btn: Clipboard.copy(GS.last_error)), size_hint=(1,None), size=(100,GS.UI_field_height), disabled=True)
 		
 		layout.add_widget(user_settings_label)
 		layout.add_widget(creator_name_layout)
@@ -1651,11 +1613,11 @@ class ThemeLayout(BoxLayout):
 		self.color_picker = ColorPicker()
 		self.color_picker.bind(color=self.on_color_picker_color)
 		
-		self.dropdown_button = ScrollDropDownButton(self.dropdown, text='', size_hint=(1,None), height=field_height,
+		self.dropdown_button = ScrollDropDownButton(self.dropdown, text='', size_hint=(1,None), height=GS.UI_field_height,
 		get_children_func=(lambda: [layout.children[0] for layout in self.dropdown_button.associated_dropdown.children[0].children]),
 		set_state_func=(lambda index: self.on_option_button_press(self.dropdown_button.children[index])))
 		self.theme_dropdown = DropDown(auto_width=False,size_hint=(1, None))
-		self.open_folder_button = Button(text='📁', font_size=19, on_release=lambda btn: self.dropdown.select(os.startfile(GS.THEMES_DIR)), font_name = 'NotoEmoji', size_hint = (None, None), size = (field_height, field_height))
+		self.open_folder_button = Button(text='📁', font_size=19, on_release=lambda btn: self.dropdown.select(os.startfile(GS.THEMES_DIR)), font_name = 'NotoEmoji', size_hint = (None, None), size = (GS.UI_field_height, GS.UI_field_height))
 		
 		first=True
 		self.color_buttons = []
@@ -1676,11 +1638,11 @@ class ThemeLayout(BoxLayout):
 				self.on_option_button_press(color_button)
 				first=False
 		
-		self.apply_button = Button(text='Apply Theme', on_release=self.apply_theme, size_hint=(None,None), size=(120,field_height))
-		self.load_button = Button(text='Load Theme', on_release=self.build_theme_dropdown, size_hint=(None,None), size=(120,field_height))
-		self.save_button = Button(text='Save Theme', on_release=self.save_theme, size_hint=(None,None), size=(120,field_height))
-		self.theme_name_input = TextInput(text='', multiline=False, size_hint=(1,None), height=field_height)
-		self.theme_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=field_height)
+		self.apply_button = Button(text='Apply Theme', on_release=self.apply_theme, size_hint=(None,None), size=(120,GS.UI_field_height))
+		self.load_button = Button(text='Load Theme', on_release=self.build_theme_dropdown, size_hint=(None,None), size=(120,GS.UI_field_height))
+		self.save_button = Button(text='Save Theme', on_release=self.save_theme, size_hint=(None,None), size=(120,GS.UI_field_height))
+		self.theme_name_input = TextInput(text='', multiline=False, size_hint=(1,None), height=GS.UI_field_height)
+		self.theme_box = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
 		self.theme_box.add_widget(self.open_folder_button)
 		self.theme_box.add_widget(self.apply_button)
 		self.theme_box.add_widget(self.load_button)
@@ -1845,14 +1807,14 @@ Do NOT run code in here that you do not trust. You have been warned.''', font_na
 		self.layout.remove_widget(self.initial_warning_button)
 		self.ns = {}
 		self.exec_input = TextInput(multiline=True, size_hint=(1, 1))
-		self.verbose_button = Button(text="GS.verbose = True", font_name = 'Unifont', size_hint=(1, None), size=(100, field_height))
+		self.verbose_button = Button(text="GS.verbose = True", font_name = 'Unifont', size_hint=(1, None), size=(100, GS.UI_field_height))
 		self.verbose_button.bind(on_release=lambda x: setattr(GS, 'verbose', True))
-		self.exec_button = Button(text="⚠⚠⚠EXECUTE⚠⚠⚠", font_name = 'Unifont', size_hint=(1, None), size=(100, field_height))
+		self.exec_button = Button(text="⚠⚠⚠EXECUTE⚠⚠⚠", font_name = 'Unifont', size_hint=(1, None), size=(100, GS.UI_field_height))
 		self.exec_button.bind(on_release=handle_exceptions(lambda x: exec(self.exec_input.text, globals(), self.ns)))
 		self.layout.add_widget(self.exec_input)
 		self.layout.add_widget(self.verbose_button)
 		self.layout.add_widget(self.exec_button)
-		self.layout.add_widget(Label(text='CVF Version: ' + str(GS.VERSION), size_hint=(1, None), height = field_height))
+		self.layout.add_widget(Label(text='CVF Version: ' + str(GS.VERSION), size_hint=(1, None), height = GS.UI_field_height))
 GS.exec_popup = ExecPopup()
 
 # 28. Gives a few quick pointers on how loading files works (with help of the background) as well as pointing out to users how to get tooltips
@@ -1923,7 +1885,7 @@ class ImageGenerationEntry(BoxLayout):
 		super().__init__(**kwargs)
 		self.lambdas = []
 		self.orientation = 'horizontal'
-		self.height = field_height*6
+		self.height = GS.UI_field_height*6
 		self.size_hint_y = None
 		self.generation = generation
 		self.initial_settings = initial_settings
@@ -1992,7 +1954,7 @@ class ImageGenerationEntry(BoxLayout):
 		self.lambdas.append(lambda btn: setattr(self.preview, 'img2img', not btn.enabled))
 		self.i2i_button.bind(on_release=handle_exceptions(self.lambdas[-1]))
 		self.i2i_condition_label = Label(text='Condition:', width=80, size_hint_x=None)
-		self.i2i_condition_input = FScrollInput(text=self.initial_settings[0], fi_mode='hybrid_float', size_hint_y=None, height=field_height, allow_empty=True, tooltip_types=['Truth Condition'])
+		self.i2i_condition_input = FScrollInput(text=self.initial_settings[0], fi_mode='hybrid_float', size_hint_y=None, height=GS.UI_field_height, allow_empty=True, tooltip_types=['Truth Condition'])
 		
 		self.i2i_top_layout.add_widget(self.i2i_button)
 		self.i2i_top_layout.add_widget(self.i2i_condition_label)
@@ -2002,16 +1964,16 @@ class ImageGenerationEntry(BoxLayout):
 		self.lambdas.append(lambda btn: GS.MAIN_APP.metadata_viewer.display_metadata(self.raw_image_data))
 		self.metadata_button.bind(on_release=handle_exceptions(self.lambdas[-1]))
 		self.i2i_strength_label = Label(text='Strength:', width=80, size_hint_x=None)
-		self.i2i_strength_input = FScrollInput(text=self.initial_settings[1], fi_mode='hybrid_float', min_value=0.01, max_value=0.99, size_hint_y=None, height=field_height, increment=0.1, tooltip_types=['Image2image Strength'])
+		self.i2i_strength_input = FScrollInput(text=self.initial_settings[1], fi_mode='hybrid_float', min_value=0.01, max_value=0.99, size_hint_y=None, height=GS.UI_field_height, increment=0.1, tooltip_types=['Image2image Strength'])
 		
 		self.i2i_middle_layout.add_widget(self.metadata_button)
 		self.i2i_middle_layout.add_widget(self.i2i_strength_label)
 		self.i2i_middle_layout.add_widget(self.i2i_strength_input)
 		
 		self.lambdas.append(lambda: self.self_destruct())
-		self.destruct_button = ConfirmButton(self.lambdas[-1], text='X', width=50, size_hint=(None,None), height=field_height, tooltip_types=['Image Deletion'])
+		self.destruct_button = ConfirmButton(self.lambdas[-1], text='X', width=50, size_hint=(None,None), height=GS.UI_field_height, tooltip_types=['Image Deletion'])
 		self.i2i_noise_label = Label(text='Noise:', width=60, size_hint_x=None)
-		self.i2i_noise_input = FScrollInput(text=self.initial_settings[2], fi_mode='hybrid_float', min_value=0, max_value=1, size_hint_y=None, height=field_height, increment=0.1, tooltip_types=['Image2image Noise'])
+		self.i2i_noise_input = FScrollInput(text=self.initial_settings[2], fi_mode='hybrid_float', min_value=0, max_value=1, size_hint_y=None, height=GS.UI_field_height, increment=0.1, tooltip_types=['Image2image Noise'])
 		
 		self.i2i_bottom_layout.add_widget(self.destruct_button)
 		self.i2i_bottom_layout.add_widget(self.i2i_noise_label)
@@ -2031,21 +1993,21 @@ class ImageGenerationEntry(BoxLayout):
 		self.lambdas.append(lambda btn: setattr(self.preview, 'vibe_transfer', not btn.enabled))
 		self.vt_button.bind(on_release=handle_exceptions(self.lambdas[-1]))
 		self.vt_condition_label = Label(text='Condition:', width=80, size_hint_x=None)
-		self.vt_condition_input = FScrollInput(text=self.initial_settings[3], fi_mode='hybrid_float', size_hint_y=None, height=field_height, allow_empty=True, tooltip_types=['Truth Condition'])
+		self.vt_condition_input = FScrollInput(text=self.initial_settings[3], fi_mode='hybrid_float', size_hint_y=None, height=GS.UI_field_height, allow_empty=True, tooltip_types=['Truth Condition'])
 		
 		self.vt_top_layout.add_widget(self.vt_button)
 		self.vt_top_layout.add_widget(self.vt_condition_label)
 		self.vt_top_layout.add_widget(self.vt_condition_input)
 		
 		self.vt_strength_label = Label(text='Strength:', width=110, size_hint_x=None)
-		self.vt_strength_input = FScrollInput(text=self.initial_settings[4], fi_mode='hybrid_float', min_value=-10, max_value=10, size_hint_y=None, height=field_height, increment=0.1, tooltip_types=['Vibe Transfer Strength'])
+		self.vt_strength_input = FScrollInput(text=self.initial_settings[4], fi_mode='hybrid_float', min_value=-10, max_value=10, size_hint_y=None, height=GS.UI_field_height, increment=0.1, tooltip_types=['Vibe Transfer Strength'])
 		
 
 		self.vt_middle_layout.add_widget(self.vt_strength_label)
 		self.vt_middle_layout.add_widget(self.vt_strength_input)
 		
 		self.vt_Information_label = Label(text='Info Ext.:', width=110, size_hint_x=None)
-		self.vt_information_input = FScrollInput(text=self.initial_settings[5], fi_mode='hybrid_float', min_value=0.01, max_value=1, size_hint_y=None, height=field_height, increment=0.1, tooltip_types=['Vibe Transfer Information Extracted'])
+		self.vt_information_input = FScrollInput(text=self.initial_settings[5], fi_mode='hybrid_float', min_value=0.01, max_value=1, size_hint_y=None, height=GS.UI_field_height, increment=0.1, tooltip_types=['Vibe Transfer Information Extracted'])
 		
 		self.vt_bottom_layout.add_widget(self.vt_Information_label)
 		self.vt_bottom_layout.add_widget(self.vt_information_input)
@@ -2063,17 +2025,17 @@ class ImageGenerationEntry(BoxLayout):
 
 	def setup_generation_ui(self):
 		# Set up the minimal UI for generation history
-		self.metadata_button = Button(text='Metadata', size_hint_y=None, height=field_height, tooltip_types=['Metadata Viewer'])
+		self.metadata_button = Button(text='Metadata', size_hint_y=None, height=GS.UI_field_height, tooltip_types=['Metadata Viewer'])
 		self.lambdas.append(lambda btn: GS.MAIN_APP.metadata_viewer.display_metadata(self.raw_image_data))
 		self.metadata_button.bind(on_release=handle_exceptions(self.lambdas[-1]))
-		self.load_button = Button(text='Load',size_hint_y=None, height=field_height)
+		self.load_button = Button(text='Load',size_hint_y=None, height=GS.UI_field_height)
 		self.load_button.bind(on_release=self.load_as_permanent)
 		self.lambdas.append(lambda: self.self_destruct())
-		self.destruct_button = ConfirmButton(self.lambdas[-1], text='X', size_hint_y=None, height=field_height, tooltip_types=['Image Deletion'])
+		self.destruct_button = ConfirmButton(self.lambdas[-1], text='X', size_hint_y=None, height=GS.UI_field_height, tooltip_types=['Image Deletion'])
 		
-		self.padding_layout_top = BoxLayout(size_hint_y=None, height=field_height*1.5)
-		self.center_layout = BoxLayout(orientation='vertical', size_hint_y=None, height=field_height*3)
-		self.padding_layout_bottom = BoxLayout(size_hint_y=None, height=field_height*1.5)
+		self.padding_layout_top = BoxLayout(size_hint_y=None, height=GS.UI_field_height*1.5)
+		self.center_layout = BoxLayout(orientation='vertical', size_hint_y=None, height=GS.UI_field_height*3)
+		self.padding_layout_bottom = BoxLayout(size_hint_y=None, height=GS.UI_field_height*1.5)
 		
 		self.center_layout.add_widget(self.metadata_button)
 		self.center_layout.add_widget(self.destruct_button)
@@ -2279,7 +2241,7 @@ class MetadataViewer(BoxLayout):
 
 	@handle_exceptions
 	def add_dict_to_layout(self, title, data_dict):
-		title_label = Label(text=f'[b]{title}[/b]', markup=True, size_hint_y=None, height=field_height, font_size=font_hyper)
+		title_label = Label(text=f'[b]{title}[/b]', markup=True, size_hint_y=None, height=GS.UI_field_height, font_size=font_hyper)
 		self.content_layout.add_widget(title_label)
 		self.add_dict_items(data_dict)
 
@@ -2287,10 +2249,10 @@ class MetadataViewer(BoxLayout):
 	def add_dict_items(self, data_dict, indent=1):
 		for key, value in data_dict.items():
 			if key in ['prompt', 'uc']:
-				row_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=field_height*4)
+				row_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height*4)
 				scrollable = True
 			else:
-				row_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=field_height)
+				row_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
 				scrollable = False
 			
 			indent_label = Label(text='↳' * indent + ' ', font_name='Unifont', size_hint_x=None, width=11*indent)
@@ -2331,5 +2293,123 @@ class MetadataViewer(BoxLayout):
 				show_metadata = True
 			else:
 				show_metadata = False
-		GS.MAIN_APP.mode_switcher.unhide_widgets([self] if show_metadata else [GS.MAIN_APP.preview])
-		GS.MAIN_APP.mode_switcher.hide_widgets([GS.MAIN_APP.preview] if show_metadata else [self])
+		GS.unhide_widgets([self] if show_metadata else [GS.MAIN_APP.preview])
+		GS.hide_widgets([GS.MAIN_APP.preview] if show_metadata else [self])
+
+@handle_exceptions
+def create_dropdown_entries(dropdown, items, widgets, target_text_field=None, extra_widget_classes=None, delimiter = ''):
+	"""
+	Create dropdown entries for various use cases, supporting:
+	- Simple buttons (from lists or dicts)
+	- Injector layouts (from dicts) with optional extra widgets
+	- Fully custom pre-instantiated widgets
+
+	Args:
+		dropdown: The dropdown menu to populate.
+		items: A list, dict, or list of widgets. Determines the dropdown's entries.
+		widgets: A list to track added widgets.
+		target_text_field: (Optional) A text field for injector operations (used only for injectors).
+		extra_widget_classes: (Optional) A list of classes for dynamic widgets in injector layouts.
+	"""
+	if target_text_field:  # Injector entries
+		_add_injector_entries(dropdown, items, widgets, target_text_field, extra_widget_classes, delimiter)
+	elif all(hasattr(item, 'add_widget') for item in items):  # Pre-instantiated widgets
+		for widget in items:
+			_add_custom_widget(dropdown, widget, widgets)
+	else:  # Simple buttons (list or dict)
+		_add_simple_buttons(dropdown, items, widgets)
+
+@handle_exceptions
+def _add_simple_buttons(dropdown, items, widgets):
+	"""Handles simple button creation from lists or dicts."""
+	if isinstance(items, dict):  # Handle dict input (text-gen_value pairs)
+		entries = items.items()
+	else:  # Handle list input (text and gen_value are identical)
+		entries = ((item, item) for item in items)
+
+	for text, gen_value in entries:
+		# Check for duplicates by `gen_value`
+		existing_btn = next((btn for btn in dropdown.children if getattr(btn, 'gen_value', None) == gen_value), None)
+		if existing_btn:
+			widgets.append(existing_btn)  # Reuse existing
+			continue
+
+		# Create and add the button
+		btn = DropDownEntryButton(text=text, size_hint_y=None, height=GS.UI_field_height)
+		btn.gen_value = gen_value  # Store the generation value for deduplication
+		btn.bind(on_release=handle_exceptions(lambda btn: dropdown.select(btn)))
+		dropdown.add_widget(btn)
+		widgets.append(btn)
+
+@handle_exceptions
+def _add_injector_entries(dropdown, item_dict, widgets, target_text_field, extra_widget_classes, delimiter):
+	"""Handles injector layout creation."""
+	for name, gen_value in item_dict.items():
+		# Check for duplicates by `gen_value`
+		existing_entry = next((entry for entry in dropdown.children if getattr(entry, 'gen_value', None) == gen_value), None)
+		if existing_entry:
+			widgets.append(existing_entry)  # Reuse existing
+			continue
+
+		# Create the injector entry layout
+		item_layout = BoxLayout(orientation='horizontal', size_hint_y=None)
+		item_layout.mod_values = {}
+
+		# Buttons for injection operations
+		copy_button = Button(text='Copy', size_hint=(None, 1), width=50)
+		prepend_button = Button(text='>Inject', size_hint=(None, 1), width=60)
+		append_button = Button(text='Inject<', size_hint=(None, 1), width=60)
+		
+		def get_dynamic_value(value_or_func):
+			return value_or_func() if callable(value_or_func) else value_or_func
+						
+		# Bindings for injection operations
+		copy_button.bind(
+			on_release=handle_exceptions(
+				lambda *args, value=gen_value, layout=item_layout: Clipboard.copy(value +  ''.join(get_dynamic_value(value) for value in layout.mod_values.values() + delimiter)))
+		)
+		prepend_button.bind(
+			on_release=handle_exceptions(
+				lambda *args, value=gen_value, layout=item_layout: setattr(
+					target_text_field, 'text', value + target_text_field.text + ''.join(get_dynamic_value(value) for value in layout.mod_values.values()) + delimiter
+				)
+			)
+		)
+		append_button.bind(
+			on_release=handle_exceptions(
+				lambda *args, value=gen_value, layout=item_layout: setattr(
+					target_text_field, 'text', target_text_field.text + value + ''.join(get_dynamic_value(value) for value in layout.mod_values.values()) + delimiter
+				)
+			)
+		)
+
+		# Add buttons to the layout
+		item_layout.add_widget(copy_button)
+		item_layout.add_widget(prepend_button)
+		item_layout.add_widget(append_button)
+
+		item_layout.gen_value = gen_value
+		# Add dynamically instantiated widgets (if any)
+		if extra_widget_classes:
+			for widget_class in extra_widget_classes:
+				extra_widget = widget_class(item_layout)  # Instantiate the widget
+				if extra_widget.parent_layout != None:
+					item_layout.add_widget(extra_widget)
+
+		# Add label for display
+		item_label = BgLabel(text=f'[u]{name}[/u]\n{gen_value}', markup=True, size_hint=(1, 1))
+		item_label.bind(
+			width=handle_exceptions(lambda *args, label=item_label: label.setter('text_size')(label, (label.width, None))),
+			texture_size=handle_exceptions(lambda *args, layout=item_layout, label=item_label: layout.setter('height')(layout, label.texture_size[1]))
+		)
+		item_layout.add_widget(item_label)
+
+		# Add to dropdown and track
+		dropdown.add_widget(item_layout)
+		widgets.append(item_layout)
+
+@handle_exceptions
+def _add_custom_widget(dropdown, widget, widgets):
+	"""Handles fully custom widget addition."""
+	dropdown.add_widget(widget)
+	widgets.append(widget)

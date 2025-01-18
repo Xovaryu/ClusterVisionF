@@ -40,6 +40,7 @@ import traceback
 from copy import deepcopy
 from collections import deque
 from PIL import ImageDraw, ImageOps
+import regex as re
 import numpy as np
 import math
 
@@ -319,6 +320,9 @@ def save_settings(folder_name,settings,sub_folder=''):
 		for key, value in settings.items():
 			if key == 'meta' or key == 'image_entries':
 				continue
+			if key == 'provider':
+				file.write(f"{repr(key)}: {repr(value.name)},\n")
+				continue
 			if isinstance(value, list) and all(isinstance(item, list) for item in value):
 				file.write(f"{repr(key)}: [")
 				for item in value:
@@ -382,3 +386,13 @@ class FilePathHandler():
 		filepath = f_string_processor(self.f_strings[key],True,var_dict)
 		os.makedirs(os.path.dirname(filepath), exist_ok=True)
 		return filepath
+
+# 11. Used when calculating token costs to make sure that any evaluated parts aren't calculated, but cause the bar to change color
+@handle_exceptions
+def pre_tokenize(text):
+	if type(text) == str:
+		pattern = r"⁅.*?⁆"  # Matches '⁅...⁆' with non-greedy content in between
+		cleaned_text, count = re.subn(pattern, "", text)  # re.subn returns both result and count of substitutions
+		return cleaned_text, count > 0
+	else:
+		return '', False

@@ -56,15 +56,6 @@ from kivy_widgets import TextInput
 from kivy_widgets import Button
 from kivy_widgets import Label
 
-from transformers import AutoTokenizer
-class CLIPCostCalculator:
-	def __init__(self, model_name_or_path="openai/clip-vit-base-patch32"):
-		self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
-	
-	def calculate_token_cost(self, text):
-		tokens = self.tokenizer.encode(text, add_special_tokens=True)
-		return len(tokens)
-clip_calculator = CLIPCostCalculator()
 
 import math
 import kivy
@@ -100,21 +91,10 @@ Config.set('input', 'mouse', 'mouse, disable_multitouch')
 from kivy.metrics import Metrics
 Metrics.density = 1
 
-MAX_TOKEN_COUNT = 225 ###To be set in context later
-PROMPT_CHUNKS = GS.NAI_PROMPT_CHUNKS + GS.USER_PROMPT_CHUNKS
-UC_CHUNKS = GS.NAI_UCS + GS.USER_UCS
-MODELS=GS.NAI_MODELS
-
 ### Configuration ###
-field_height=30
 font_hyper=20
 font_large=19
 font_small=15
-
-l_row_size1={'size_hint':(None, None),'size':(120, field_height)}
-l_row_size2={'size_hint':(None, 1),'size':(120, field_height)}
-imp_row_size1={'size_hint':(None, None),'size':(field_height, field_height)}
-imp_row_size2={'size_hint':(None, 1),'size':(field_height, field_height)}
 
 class ClusterVisionF(App):
 	# 01. Functions needed for the steps slider
@@ -145,7 +125,7 @@ class ClusterVisionF(App):
 		Window.bind(on_drop_end=FL.on_drop_end)
 		
 		# These are the main 3 layouts containing the primary inputs on the left, console and additional inputs, as well as image handling on the right
-		self.input_layout = GridLayout(cols=3)
+		self.input_layout = BoxLayout(orientation='vertical')
 		self.meta_layout = BoxLayout(orientation='vertical', size_hint=(0.5, 1))
 		self.image_organization_layout = BoxLayout(orientation='vertical')
 		
@@ -159,79 +139,162 @@ class ClusterVisionF(App):
 		layout = BoxLayout(orientation='vertical', spacing=10, padding=10)
 
 		# Mode Switcher and config window buttons
-		mode_label = Label(text='Mode:', **l_row_size1)
-		settings_button = Button(text='⚙️', font_size=font_large, font_name = 'NotoEmoji', on_release=self.config_window.open, **imp_row_size1)
-		theme_button = Button(text='🎨', font_size=font_large, font_name = 'NotoEmoji', on_release=self.theme_window.open, **imp_row_size1)
-		file_handling_button = Button(text='📁', font_size=font_large, font_name = 'NotoEmoji', on_release=self.file_handling_window.open, **imp_row_size1)
-		drop_overlay_button = Button(text='Help', font_size=font_large, size_hint = (None, None), on_release=self.drop_overlay.open, size = (65, field_height))
-		self.mode_switcher = KW.ModeSwitcher(app=self, size_hint=(1, None), size=(100, field_height))
-		mode_switcher_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, field_height))
+		mode_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
+		mode_label = Label(text='Mode:', **GS.l_row_size)
+		settings_button = Button(text='⚙️', font_size=font_large, font_name = 'NotoEmoji', on_release=self.config_window.open, **GS.imp_row_size)
+		theme_button = Button(text='🎨', font_size=font_large, font_name = 'NotoEmoji', on_release=self.theme_window.open, **GS.imp_row_size)
+		file_handling_button = Button(text='📁', font_size=font_large, font_name = 'NotoEmoji', on_release=self.file_handling_window.open, **GS.imp_row_size)
+		drop_overlay_button = Button(text='Help', font_size=font_large, size_hint = (None, None), on_release=self.drop_overlay.open, size = (65, GS.UI_field_height))
+		self.mode_switcher = KW.ModeSwitcher(app=self, size_hint=(1, None), size=(100, GS.UI_field_height))
+		mode_switcher_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, GS.UI_field_height))
 		mode_switcher_layout.add_widget(theme_button)
 		#mode_switcher_layout.add_widget(file_handling_button)
 		mode_switcher_layout.add_widget(drop_overlay_button)
 		mode_switcher_layout.add_widget(self.mode_switcher)
-
+		
+		mode_row.add_widget(mode_label)
+		mode_row.add_widget(settings_button)
+		mode_row.add_widget(mode_switcher_layout)
+		self.input_layout.add_widget(mode_row)
+		
 		# Generation Providers
-		generation_provider_label = Label(text='Gen. Providers:', **l_row_size1)
-		self.generation_provider_import = KW.ImportButton(**imp_row_size1)
+		generation_provider_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
+		generation_provider_label = Label(text='Gen. Provider:', **GS.l_row_size)
+		self.generation_provider_import = KW.ImportButton(**GS.imp_row_size)
 		self.generation_provider_dropdown = DropDown()
-		self.generation_provider_button = KW.ScrollDropDownButton(self.generation_provider_dropdown, text='NovelAI Diffusion', size_hint=(1, None), size=(100, field_height))
+		self.generation_provider_button = KW.ScrollDropDownButton(self.generation_provider_dropdown, text='NO GENERATION PROVIDER INITIALIZED', size_hint=(1, None),
+			size=(100, GS.UI_field_height), set_state_func = (handle_exceptions(lambda index: [
+				setattr(self.generation_provider_button, 'text', self.generation_provider_button.children[index].text),
+				GS.MODULE_FACTORY.providers[self.generation_provider_button.children[index].text].switch_to()
+			])))
+		self.generation_provider_dropdown.bind(on_select=handle_exceptions(lambda instance, btn: [
+			setattr(self.generation_provider_button, 'text', btn.text),
+			GS.MODULE_FACTORY.providers[btn.text].switch_to()
+			]))
 
-		for provider_name in IM_G.module_factory.list_providers():
-			btn = KW.DropDownEntryButton(text=provider_name, size_hint_y=None, height=field_height)
-			btn.bind(on_release=handle_exceptions(lambda btn: self.generation_provider_dropdown.select(btn.text)))
+		for provider_name in list(GS.MODULE_FACTORY.providers.keys()):
+			btn = KW.DropDownEntryButton(text=provider_name, size_hint_y=None, height=GS.UI_field_height)
+			btn.bind(on_release=handle_exceptions(lambda btn: self.generation_provider_dropdown.select(btn)))
 			self.generation_provider_dropdown.add_widget(btn)
-		self.generation_provider_dropdown.bind(on_select=handle_exceptions(lambda instance, x: setattr(self.generation_provider_button, 'text', x)))
-	
-		# Name
-		name_label = Label(text='Name:', **l_row_size1)
-		self.name_import = KW.ImportButton(**imp_row_size1)
-		self.name_input = KW.ScrollInput(min_value=-100000, max_value=100000, fi_mode='hybrid_int', increment=1, multiline=False, size_hint=(1, None), size=(100, field_height))
-	
-		# Folder Name
-		folder_name_label = Label(text='Folder Name:', **l_row_size1)
-		self.folder_name_import = KW.ImportButton(**imp_row_size1)
-		self.folder_name_input = KW.ScrollInput(min_value=-100000, max_value=100000, fi_mode='hybrid_int', increment=1, multiline=False, allow_empty=True, size_hint=(1, None), size=(100, field_height))
+
+		generation_provider_row.add_widget(generation_provider_label)
+		generation_provider_row.add_widget(self.generation_provider_import)
+		generation_provider_row.add_widget(self.generation_provider_button)
+		self.input_layout.add_widget(generation_provider_row)
 
 		# Model
-		self.model_label = Label(text='Model:', **l_row_size1)
-		self.model_import = KW.ImportButton(**imp_row_size1)
+		model_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
+		self.model_label = Label(text='Model:', **GS.l_row_size)
+		self.model_import = KW.ImportButton(**GS.imp_row_size)
 		
 		self.model_dropdown = DropDown()
-		self.model_button = KW.ScrollDropDownButton(self.model_dropdown, text='nai-diffusion-3', size_hint=(1, None), size=(100, field_height))
+		self.model_dropdown.bind(on_select=handle_exceptions(lambda instance, btn: setattr(GS.MAIN_APP.model_button, 'text', btn.text)))
+		self.model_button = KW.ScrollDropDownButton(self.model_dropdown, text='NO MODEL INITIALIZED', size_hint=(1, None), size=(100, GS.UI_field_height))
 
-		for model_name in MODELS.values():
-			btn = KW.DropDownEntryButton(text=model_name, size_hint_y=None, height=field_height)
-			btn.bind(on_release=handle_exceptions(lambda btn: self.model_dropdown.select(btn.text)))
-			self.model_dropdown.add_widget(btn)
-		self.model_dropdown.bind(on_select=handle_exceptions(lambda instance, x: setattr(self.model_button, 'text', x)))
+		model_row.add_widget(self.model_label)
+		model_row.add_widget(self.model_import)
+		model_row.add_widget(self.model_button)
+		self.input_layout.add_widget(model_row)
+
+		# Name
+		name_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
+		name_label = Label(text='Name:', **GS.l_row_size)
+		self.name_import = KW.ImportButton(**GS.imp_row_size)
+		self.name_input = KW.ScrollInput(min_value=-100000, max_value=100000, fi_mode='hybrid_int', increment=1, multiline=False, size_hint=(1, None), size=(100, GS.UI_field_height))
+	
+		name_row.add_widget(name_label)
+		name_row.add_widget(self.name_import)
+		name_row.add_widget(self.name_input)
+		self.input_layout.add_widget(name_row)
+		
+		# Folder Name
+		folder_name_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
+		folder_name_label = Label(text='Folder Name:', **GS.l_row_size)
+		self.folder_name_import = KW.ImportButton(**GS.imp_row_size)
+		self.folder_name_input = KW.ScrollInput(min_value=-100000, max_value=100000, fi_mode='hybrid_int', increment=1, multiline=False, allow_empty=True, size_hint=(1, None), size=(100, GS.UI_field_height))
+
+		folder_name_row.add_widget(folder_name_label)
+		folder_name_row.add_widget(self.folder_name_import)
+		folder_name_row.add_widget(self.folder_name_input)
+		self.input_layout.add_widget(folder_name_row)
 
 		# Seed - Cluster Collage
-		cc_seed_label = Label(text='Seed:', **l_row_size2)
-		self.cc_seed_import = KW.ImportButton(**imp_row_size2)
-		self.cc_seed_grid=KW.SeedGrid(size_hint=(1, 1))
+		cc_seed_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height*4)
+		cc_seed_label = Label(text='Seed:', **GS.l_row_size)
+		self.cc_seed_import = KW.ImportButton(**GS.imp_row_size)
+		self.cc_seed_grid=KW.SeedGrid(size_hint=(1, None), height=GS.UI_field_height*4, layout=cc_seed_row)
+
+		cc_seed_row.add_widget(cc_seed_label)
+		cc_seed_row.add_widget(self.cc_seed_import)
+		cc_seed_row.add_widget(self.cc_seed_grid)
+		self.input_layout.add_widget(cc_seed_row)
 
 		# Seed - Image Sequence
-		is_seed_label = Label(text='Seed:', **l_row_size1)
-		self.is_seed_import = KW.ImportButton(**imp_row_size1)
-		is_seed_randomize = Button(text='Randomize', size_hint=(None, None), size=(100, field_height))
-		is_seed_clear = Button(text='Clear', size_hint=(None, None), size=(60, field_height))
-		self.is_seed_input = KW.SeedScrollInput(min_value=0, max_value=4294967295, increment=1000, text='', multiline=False, size_hint=(1, None), size=(100, field_height), allow_empty=True)
+		is_seed_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
+		is_seed_label = Label(text='Seed:', **GS.l_row_size)
+		self.is_seed_import = KW.ImportButton(**GS.imp_row_size)
+		is_seed_randomize = Button(text='Randomize', size_hint=(None, None), size=(100, GS.UI_field_height))
+		is_seed_clear = Button(text='Clear', size_hint=(None, None), size=(60, GS.UI_field_height))
+		self.is_seed_input = KW.SeedScrollInput(min_value=0, max_value=4294967295, increment=1000, text='', multiline=False, size_hint=(1, None), size=(100, GS.UI_field_height), allow_empty=True)
 		is_seed_randomize.bind(on_release=handle_exceptions(lambda btn: setattr(self.is_seed_input, 'text', str(IM_G.generate_seed()))))
 		is_seed_clear.bind(on_release=handle_exceptions(lambda btn: setattr(self.is_seed_input, 'text', '')))
-		is_seed_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, field_height))
+		is_seed_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, GS.UI_field_height))
 		is_seed_layout.add_widget(is_seed_randomize)
 		is_seed_layout.add_widget(is_seed_clear)
 		is_seed_layout.add_widget(self.is_seed_input)
 
+		is_seed_row.add_widget(is_seed_label)
+		is_seed_row.add_widget(self.is_seed_import)
+		is_seed_row.add_widget(is_seed_layout)
+		self.input_layout.add_widget(is_seed_row)
+
+		# Collage Dimensions
+		cc_dim_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
+		cc_dim_label = Label(text='Collage Dim.:', **GS.l_row_size)
+		self.cc_dim_import = KW.ImportButton(**GS.imp_row_size)
+		cc_dim_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=GS.UI_field_height)
+		cc_dim_width_label = Label(text='Columns:', size_hint=(None, None), width=80, height=GS.UI_field_height)
+		self.cc_dim_width = KW.ScrollInput(text='3', size_hint=(1, None), width=60, height=GS.UI_field_height, tooltip_types=['Cluster Columns'])
+		cc_dim_height_label = Label(text='Rows:', size_hint=(None, None), width=80, height=GS.UI_field_height)
+		self.cc_dim_height = KW.ScrollInput(text='3', size_hint=(1, None), width=60, height=GS.UI_field_height, tooltip_types=['Cluster Rows'])
+		cc_dim_layout.add_widget(cc_dim_width_label)
+		cc_dim_layout.add_widget(self.cc_dim_width)
+		cc_dim_layout.add_widget(cc_dim_height_label)
+		cc_dim_layout.add_widget(self.cc_dim_height)
+
+		cc_dim_row.add_widget(cc_dim_label)
+		cc_dim_row.add_widget(self.cc_dim_import)
+		cc_dim_row.add_widget(cc_dim_layout)
+		self.input_layout.add_widget(cc_dim_row)
+
+		# Image Sequence Quantity
+		is_range_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
+		is_range_label = Label(text='Quantity/FPS:', **GS.l_row_size)
+		self.is_range_import = KW.ImportButton(**GS.imp_row_size)
+		is_range_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=GS.UI_field_height)
+		self.is_quantity = KW.ScrollInput(text='28', min_value=1, max_value=100000, size_hint=(1, None), width=60, height=GS.UI_field_height, tooltip_types=['Image Quantity'])
+		self.is_video = KW.StateShiftButton(text='🎬',font_name='NotoEmoji')
+		is_range_layout.add_widget(self.is_quantity)
+		is_range_layout.add_widget(self.is_video)
+		is_fps_label = Label(text='FPS:', size_hint=(None, None), size=(60,GS.UI_field_height))
+		self.is_fps = KW.ScrollInput(text=str(GS.BASE_FPS), min_value=1, max_value=144, size_hint=(1, None), width=60, height=GS.UI_field_height)
+		is_range_layout.add_widget(is_fps_label)
+		is_range_layout.add_widget(self.is_fps)
+
+		is_range_row.add_widget(is_range_label)
+		is_range_row.add_widget(self.is_range_import)
+		is_range_row.add_widget(is_range_layout)
+		self.input_layout.add_widget(is_range_row)
+
 		# Steps
-		steps_label = Label(text='Steps:', **l_row_size1)
-		self.steps_import = KW.ImportButton(**imp_row_size1)
-		steps_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, field_height))
+		steps_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
+		steps_label = Label(text='Steps:', **GS.l_row_size)
+		self.steps_import = KW.ImportButton(**GS.imp_row_size)
+		steps_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, GS.UI_field_height))
 		self.steps_slider_min = Slider(min=1, max=100, value=28, step=1)
-		self.steps_counter_min = Label(text=str(28), size_hint=(None, None), size=(50, field_height))
+		self.steps_counter_min = Label(text=str(28), size_hint=(None, None), size=(50, GS.UI_field_height))
 		self.steps_slider_max = Slider(min=1, max=100, value=28, step=1)
-		self.steps_counter_max = Label(text=str(28), size_hint=(None, None), size=(50, field_height))
+		self.steps_counter_max = Label(text=str(28), size_hint=(None, None), size=(50, GS.UI_field_height))
 		self.steps_slider_min.bind(value=self.on_steps_value_change_min)
 		self.steps_slider_max.bind(value=self.on_steps_value_change_max)
 		steps_layout.add_widget(self.steps_slider_min)
@@ -239,89 +302,121 @@ class ClusterVisionF(App):
 		steps_layout.add_widget(self.steps_slider_max)
 		steps_layout.add_widget(self.steps_counter_max)
 		# Create the f-string variant
-		steps_super_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, field_height))
+		steps_super_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, GS.UI_field_height))
 		steps_super_layout.add_widget(steps_layout)# This layout needs to be added first because the StateFButton immediately hides it and that requires a parent
-		self.steps_input_f = KW.FScrollInput(min_value=1, max_value=50, fi_mode='hybrid_float', increment=1, text='28', multiline=False, size_hint=(1, None), size=(100, field_height), font_size=font_small,font_name='Unifont', tooltip_types=['Steps'])
-		self.steps_f = KW.StateFButton(self.mode_switcher, steps_layout, self.steps_input_f, None, [steps_layout], [self.steps_input_f], size_hint=(None, None), size=(field_height, field_height))
+		self.steps_input_f = KW.FScrollInput(min_value=1, max_value=50, fi_mode='hybrid_int', increment=1, text='28', multiline=False, size_hint=(1, None), size=(100, GS.UI_field_height), font_size=font_small,font_name='Unifont', tooltip_types=['Steps'])
+		self.steps_f = KW.StateFButton(self.mode_switcher, steps_layout, self.steps_input_f, None, [steps_layout], [self.steps_input_f], size_hint=(None, None), size=(GS.UI_field_height, GS.UI_field_height))
 		steps_super_layout.add_widget(self.steps_f)
 		steps_super_layout.remove_widget(steps_layout) # We also need remove and re-add this layout to position it correctly
 		steps_super_layout.add_widget(steps_layout)
 		steps_super_layout.add_widget(self.steps_input_f)
 
+		steps_row.add_widget(steps_label)
+		steps_row.add_widget(self.steps_import)
+		steps_row.add_widget(steps_super_layout)
+		self.input_layout.add_widget(steps_row)
+
 		# Guidance
-		guidance_label = Label(text='Guidance:', **l_row_size1)
-		self.guidance_import = KW.ImportButton(**imp_row_size1)
-		guidance_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, field_height))
+		guidance_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
+		guidance_label = Label(text='Guidance:', **GS.l_row_size)
+		self.guidance_import = KW.ImportButton(**GS.imp_row_size)
+		guidance_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, GS.UI_field_height))
 		#The API actually accepts much, much higher guidance values, though there really seems no point in going higher than 100 at all
-		self.guidance_input_min = KW.ScrollInput(min_value=-1000, max_value=1000, fi_mode=float, increment=0.1, text='10', multiline=False, size_hint=(1, None), size=(100, field_height), font_size=font_small, tooltip_types=['CFG Scale/Scale/Guidance'])
-		self.guidance_input_max = KW.ScrollInput(min_value=-1000, max_value=1000, fi_mode=float, increment=0.1, text='10', multiline=False, size_hint=(1, None), size=(100, field_height), font_size=font_small, tooltip_types=['CFG Scale/Scale/Guidance'])
+		self.guidance_input_min = KW.ScrollInput(min_value=-1000, max_value=1000, fi_mode=float, increment=0.1, text='10', multiline=False, size_hint=(1, None), size=(100, GS.UI_field_height), font_size=font_small, tooltip_types=['CFG Scale/Scale/Guidance'])
+		self.guidance_input_max = KW.ScrollInput(min_value=-1000, max_value=1000, fi_mode=float, increment=0.1, text='10', multiline=False, size_hint=(1, None), size=(100, GS.UI_field_height), font_size=font_small, tooltip_types=['CFG Scale/Scale/Guidance'])
 		guidance_layout.add_widget(self.guidance_input_min)
 		guidance_layout.add_widget(self.guidance_input_max)
 		# Create the f-string variant
-		self.guidance_input_f = KW.FScrollInput(min_value=-1000, max_value=1000, fi_mode='hybrid_float', increment=0.1, text='5', multiline=False, size_hint=(1, None), size=(100, field_height), font_size=font_small,font_name='Unifont', tooltip_types=['CFG Scale/Scale/Guidance'])
-		guidance_rescale_label = Label(text='G. Rescale:', **l_row_size1)
-		self.guidance_rescale_input_f = KW.FScrollInput(min_value=-1000, max_value=1000, fi_mode='hybrid_float', increment=0.1, text='0', multiline=False, size_hint=(1, None), size=(100, field_height), font_size=font_small,font_name='Unifont')
-		guidance_layout_f = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, field_height))
+		self.guidance_input_f = KW.FScrollInput(min_value=-1000, max_value=1000, fi_mode='hybrid_float', increment=0.1, text='5', multiline=False, size_hint=(1, None), size=(100, GS.UI_field_height), font_size=font_small,font_name='Unifont', tooltip_types=['CFG Scale/Scale/Guidance'])
+		guidance_rescale_label = Label(text='G. Rescale:', **GS.l_row_size)
+		self.guidance_rescale_input_f = KW.FScrollInput(min_value=-1000, max_value=1000, fi_mode='hybrid_float', increment=0.1, text='0', multiline=False, size_hint=(1, None), size=(100, GS.UI_field_height), font_size=font_small,font_name='Unifont')
+		guidance_layout_f = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, GS.UI_field_height))
 		
 		guidance_layout_f.add_widget(self.guidance_input_f)
 		guidance_layout_f.add_widget(guidance_rescale_label)
 		guidance_layout_f.add_widget(self.guidance_rescale_input_f)
-		guidance_super_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, field_height))
+		guidance_super_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, GS.UI_field_height))
 		guidance_super_layout.add_widget(guidance_layout) # This layout needs to be added first because the StateFButton immediately hides it and that requires a parent
-		self.guidance_f = KW.StateFButton(self.mode_switcher, guidance_layout, guidance_layout_f, None, [guidance_layout], [self.guidance_input_f], size_hint=(None, None), size=(field_height, field_height))
+		self.guidance_f = KW.StateFButton(self.mode_switcher, guidance_layout, guidance_layout_f, None, [guidance_layout], [self.guidance_input_f], size_hint=(None, None), size=(GS.UI_field_height, GS.UI_field_height))
 
 		guidance_super_layout.add_widget(self.guidance_f)
-		guidance_super_layout.remove_widget(guidance_layout) # We also need remove and re-add this layout to position it correctly
+		guidance_super_layout.remove_widget(guidance_layout) # We also need to remove and re-add this layout to position it correctly
 		guidance_super_layout.add_widget(guidance_layout)
 		guidance_super_layout.add_widget(guidance_layout_f)
+		
+		guidance_row.add_widget(guidance_label)
+		guidance_row.add_widget(self.guidance_import)
+		guidance_row.add_widget(guidance_super_layout)
+		self.input_layout.add_widget(guidance_row)
 
 		# Sampler
-		sampler_label = Label(text='Sampler:', **l_row_size1)
-		self.sampler_import = KW.ImportButton(size_hint = (None, None), size = (field_height, field_height*2))
+		sampler_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height*2)
+		sampler_label = Label(text='Sampler:', **GS.l_row_size)
+		self.sampler_import = KW.ImportButton(**GS.imp_row_size)
 
-		self.sampler_input = TextInput(multiline=True, size_hint=(1, 1), height=field_height*2)
-		add_sampler_button = Button(text='<', size_hint=(None, 1), width=field_height)
+		self.sampler_input = TextInput(multiline=True, size_hint=(1, 1), height=GS.UI_field_height*2)
+		add_sampler_button = Button(text='<', size_hint=(None, 1), width=GS.UI_field_height)
 		add_sampler_button.bind(on_release=handle_exceptions(
 			lambda btn: setattr(self.sampler_input, 'text', self.format_sampler_text(self.sampler_input.text))
 		))
-		sampler_clear_button = Button(text='Clear', size_hint=(None, 1), size=(60, field_height))
+		sampler_clear_button = Button(text='Clear', size_hint=(None, 1), size=(60, GS.UI_field_height))
 		sampler_clear_button.bind(on_release=handle_exceptions(lambda btn: setattr(self.sampler_input, 'text', '')))
 
-		sampler_injector = KW.SamplerInjectorDropDown(size_hint=(None, 1), width=field_height, dropdown_list=GS.NAI_SAMPLERS, button_text='+', target=self.sampler_input, inject_identifier='S')
+		self.sampler_injector_dropdown = KW.PermissiveDropDown(auto_width=False,size_hint=(1, None))
+		self.sampler_injector_dropdown.children[0].bind(
+			children=lambda instance, children: [
+				child.mod_values.update({'NOISE_SCHEDULE': lambda: '_' + self.noise_schedule_button.text})
+				for child in children if hasattr(child, 'mod_values')
+			]
+		)
+		self.sampler_injector_button = Button(text='+', size_hint=(None, 1), width=GS.UI_field_height, height=GS.UI_field_height)
+		self.sampler_injector_button.bind(
+		on_release=handle_exceptions(lambda *args: [_move_noise_button(self, self.sampler_injector_dropdown),
+		self.sampler_injector_dropdown.open(self.sampler_injector_button)])
+		)
 
-		sampler_dropdown = DropDown()
-		self.sampler_button = KW.ScrollDropDownButton(sampler_dropdown, text='k_euler', size_hint=(1, None), size=(100, field_height))
-		
-		for sampler_name in GS.NAI_SAMPLERS_RAW:
-			btn = KW.DropDownEntryButton(text=sampler_name, size_hint_y=None, height=field_height)
-			btn.bind(on_release=handle_exceptions(lambda btn: sampler_dropdown.select(btn.text)))
-			sampler_dropdown.add_widget(btn)
-		sampler_dropdown.bind(on_select=handle_exceptions(lambda instance, x: setattr(self.sampler_button, 'text', x)))
+		self.sampler_dropdown = DropDown()
+		self.sampler_dropdown.bind(on_select=handle_exceptions(lambda instance, btn: setattr(self.sampler_button, 'text', btn.text)))
+		self.sampler_dropdown.bind(on_select=handle_exceptions(lambda instance, btn: setattr(self.sampler_button, 'gen_value', btn.gen_value)))
+		self.sampler_button = KW.ScrollDropDownButton(self.sampler_dropdown, text='NOT INITIALIZED', size_hint=(1, None), size=(100, GS.UI_field_height),
+			set_state_func = (lambda index: [
+				setattr(self.sampler_button, 'text', self.sampler_button.children[index].text),
+				setattr(self.sampler_button, 'gen_value', self.sampler_button.children[index].gen_value)
+			]))
+		self.sampler_button.gen_value = 'NI'
 
-		self.sampler_cutoff = KW.ScrollInput(text='0', min_value=0, size_hint=(None, None), width=28, height=field_height, tooltip_types=['Sampler Cutoff'])
-		noise_schedule_dropdown = DropDown()
-		self.noise_schedule_button = KW.ScrollDropDownButton(noise_schedule_dropdown, text='default', size_hint=(1, None), size=(100, field_height))
-		for noise_schedule_name in GS.NAI_NOISE_SCHEDULERS:
-			btn = KW.DropDownEntryButton(text=noise_schedule_name, size_hint_y=None, height=field_height)
-			btn.bind(on_release=handle_exceptions(lambda btn: noise_schedule_dropdown.select(btn.text)))
-			noise_schedule_dropdown.add_widget(btn)
-		noise_schedule_dropdown.bind(on_select=handle_exceptions(lambda instance, x: setattr(self.noise_schedule_button, 'text', x)))
+		self.sampler_cutoff = KW.ScrollInput(text='0', min_value=0, size_hint=(None, None), width=28, height=GS.UI_field_height, tooltip_types=['Sampler Cutoff'])
+		self.noise_schedule_dropdown = DropDown()
+		self.noise_schedule_button = KW.ScrollDropDownButton(self.noise_schedule_dropdown, text='default', size_hint=(1, None), size=(100, GS.UI_field_height))
+		self.noise_schedule_dropdown.bind(on_select=handle_exceptions(lambda instance, btn: setattr(self.noise_schedule_button, 'text', btn.text)))
 
+		self.sampler_injector_dropdown.bind(on_dismiss=handle_exceptions(lambda *args: _move_noise_button(self, sampler_sublayout_bottom)))
+		self.noise_schedule_button.target_index = 0
+		self.noise_schedule_button.mod_values = {}
+		def _move_noise_button(self, target_layout):
+			if target_layout == self.sampler_injector_dropdown:
+				self.noise_schedule_button.target_index = sampler_sublayout_bottom.children.index(self.noise_schedule_button)
+				self.noise_schedule_button.parent.remove_widget(self.noise_schedule_button)
+				self.sampler_injector_dropdown.add_widget(self.noise_schedule_button, index=len(self.sampler_injector_dropdown.children[0].children))
+			else:
+				self.noise_schedule_button.parent.remove_widget(self.noise_schedule_button)
+				sampler_sublayout_bottom.add_widget(self.noise_schedule_button, index=0)
+		self.sampler_injector_dropdown.register_scrollable(self.noise_schedule_button)
 
-		self.sampler_smea = KW.StateShiftButton(text='SMEA', size_hint=(None, 1), size=(60,field_height))
-		self.sampler_dyn = KW.StateShiftButton(text='Dyn', size_hint=(None, 1), size=(46,field_height))
+		self.sampler_smea = KW.StateShiftButton(text='SMEA', size_hint=(None, 1), size=(60,GS.UI_field_height))
+		self.sampler_dyn = KW.StateShiftButton(text='Dyn', size_hint=(None, 1), size=(46,GS.UI_field_height))
 		self.sampler_smea.bind(enabled=handle_exceptions(lambda instance, value: KW.on_smea_disabled(value, self.sampler_dyn)))
 		self.sampler_dyn.bind(enabled=handle_exceptions(lambda instance, value: KW.on_dyn_enabled(value, self.sampler_smea)))
 		
-		sampler_layout = BoxLayout(orientation='horizontal',size_hint=(1, None), height=field_height*2)
-		sampler_sublayout_top = BoxLayout(orientation='horizontal',size_hint=(1, None), height=field_height*1)
-		sampler_sublayout_bottom = BoxLayout(orientation='horizontal',size_hint=(1, None), height=field_height*1)
-		sampler_sublayout = BoxLayout(orientation='vertical',size_hint=(None, None), size=(285, field_height*2))
+		sampler_layout = BoxLayout(orientation='horizontal')
+		sampler_sublayout_top = BoxLayout(orientation='horizontal',size_hint=(1, None), height=GS.UI_field_height*1)
+		sampler_sublayout_bottom = BoxLayout(orientation='horizontal',size_hint=(1, None), height=GS.UI_field_height*1)
+		sampler_sublayout = BoxLayout(orientation='vertical',size_hint=(None, None), size=(285, GS.UI_field_height*2))
 		
 		sampler_sublayout_top.add_widget(add_sampler_button)
 		sampler_sublayout_top.add_widget(sampler_clear_button)
 		sampler_sublayout_top.add_widget(self.sampler_button)
-		sampler_sublayout_bottom.add_widget(sampler_injector)
+		sampler_sublayout_bottom.add_widget(self.sampler_injector_button)
 		sampler_sublayout_bottom.add_widget(self.sampler_cutoff)
 		sampler_sublayout_bottom.add_widget(self.sampler_smea)
 		sampler_sublayout_bottom.add_widget(self.sampler_dyn)
@@ -333,252 +428,170 @@ class ClusterVisionF(App):
 		sampler_layout.add_widget(self.sampler_input)
 		sampler_layout.add_widget(sampler_sublayout)
 
-		# Decrisper
-		decrisp_label = Label(text='Decrisper:', **l_row_size1)
-		self.decrisp_import = KW.ImportButton(**imp_row_size1)
-		self.decrisp_button = KW.StateShiftButton(text='Decrisper', size_hint=(None, None), size=(90,field_height))
-		decrisp_scale = Label(text='Mimic Scale:', size_hint=(None, None), size=(100, field_height))
-		self.decrisp_guidance_input = KW.FScrollInput(min_value=-10000, max_value=10000, fi_mode='hybrid_float', increment=0.1, text='10', multiline=False, size_hint=(1, None), size=(100, field_height), font_size=font_small,font_name='Unifont')
-		decrisp_percentile = Label(text='Percentile:', size_hint=(None, None), size=(90, field_height))
-		self.decrisp_percentile_input = KW.FScrollInput(min_value=0.000001, max_value=1, fi_mode='hybrid_float', increment=0.001, text='0.999', multiline=False, size_hint=(1, None), size=(100, field_height), round_value=6, font_size=font_small,font_name='Unifont')
-		decrisp_layout = BoxLayout(orientation='horizontal',size_hint=(1, None), height=field_height)
-		decrisp_layout.add_widget(self.decrisp_button)
-		#decrisp_layout.add_widget(decrisp_scale)
-		#decrisp_layout.add_widget(self.decrisp_guidance_input)
-		#decrisp_layout.add_widget(decrisp_percentile)
-		#decrisp_layout.add_widget(self.decrisp_percentile_input)
+		sampler_row.add_widget(sampler_label)
+		sampler_row.add_widget(self.sampler_import)
+		sampler_row.add_widget(sampler_layout)
+		self.input_layout.add_widget(sampler_row)
 		
 		# Resolution
-		resolution_label = Label(text='Resolution:', **l_row_size1)
-		self.resolution_import = KW.ImportButton(**imp_row_size1)
+		resolution_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
+		resolution_label = Label(text='Resolution:', **GS.l_row_size)
+		self.resolution_import = KW.ImportButton(**GS.imp_row_size)
 		self.resolution_selector = KW.ResolutionSelector()
 
+		resolution_row.add_widget(resolution_label)
+		resolution_row.add_widget(self.resolution_import)
+		resolution_row.add_widget(self.resolution_selector)
+		self.input_layout.add_widget(resolution_row)
+
 		# Prompt
-		prompt_label = Label(text='Prompt:', **l_row_size2)
-		prompt_buttons_layout = BoxLayout(orientation='vertical', **imp_row_size2)
+		prompt_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height*4)
+		prompt_label = Label(text='Prompt:', **GS.l_row_size)
+		prompt_buttons_layout = BoxLayout(orientation='vertical', **GS.imp_row_size)
 		self.prompt_import = KW.ImportButton()
-		self.prompt_input = TextInput(multiline=True, size_hint=(1, 1), size=(100, field_height*4), tooltip_types=['Prompt'])
-		self.prompt_input.font_size = 23
-		self.prompt_input.font_name = 'Unifont'
-		prompt_injector = KW.InjectorDropDown(dropdown_list=PROMPT_CHUNKS, button_text='+', target=self.prompt_input)
+		self.prompt = KW.FPrompt(size_hint=(1, 1), size=(100, GS.UI_field_height*4))
+		self.prompt.input.font_size = 23
+		self.prompt.input.font_name = 'Unifont'
 		
-		prompt_buttons_layout.add_widget(prompt_injector)
+		self.prompt_dropdown = DropDown(auto_width=False,size_hint=(1, None))
+		self.prompt_injector_button = Button(text='+', size_hint=(None, 1), width=GS.UI_field_height, height=GS.UI_field_height*2)
+		self.prompt_injector_button.bind(on_release=handle_exceptions(lambda *args: self.prompt_dropdown.open(self.prompt_injector_button)))
+		
+		prompt_buttons_layout.add_widget(self.prompt_injector_button)
 		prompt_buttons_layout.add_widget(self.prompt_import)
 		
 		prompt_layout = BoxLayout(orientation='horizontal')
-		prompt_token_counter=KW.TokenCostBar(clip_calculator, MAX_TOKEN_COUNT, size_hint=(None, 1), width=20)
-		prompt_layout.add_widget(self.prompt_input)
-		prompt_layout.add_widget(prompt_token_counter)
-		self.prompt_input.bind(text=prompt_token_counter.calculate_token_cost)
-		# Create the f-string variant
-		self.prompt_f_input = KW.PromptGrid(size_hint=(1, 1), size=(100, field_height*4))
-		prompt_layout.add_widget(self.prompt_f_input)
-		self.prompt_f = KW.StateFButton(self.mode_switcher, self.prompt_input, self.prompt_f_input.prompt_inputs[0], prompt_injector, prompt_layout.children[1:], [prompt_layout.children[0]], enabled=False)
-		prompt_buttons_layout.add_widget(self.prompt_f)
+		self.prompt_token_counter=KW.TokenCostBar(self.prompt.input, size_hint=(None, 1), width=20)
+		prompt_layout.add_widget(self.prompt)
+		prompt_layout.add_widget(self.prompt_token_counter)
+		self.prompt.input.bind(text=self.prompt_token_counter.update_rect)
+
+		prompt_row.add_widget(prompt_label)
+		prompt_row.add_widget(prompt_buttons_layout)
+		prompt_row.add_widget(prompt_layout)
+		self.input_layout.add_widget(prompt_row)
 
 		# UC
-		uc_label = Label(text='Neg. Prompt:', **l_row_size2)
-		uc_buttons_layout = BoxLayout(orientation='vertical', **imp_row_size2)
+		uc_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height*4)
+		uc_label = Label(text='Neg. Prompt:', **GS.l_row_size)
+		uc_buttons_layout = BoxLayout(orientation='vertical', **GS.imp_row_size)
 		self.uc_import = KW.ImportButton()
-		self.uc_input = TextInput(multiline=True, size_hint=(1, 1), size=(100, field_height*4), tooltip_types=['Negative Prompt/Undesired Content'])
-		self.uc_input.font_size = 23
-		self.uc_input.font_name = 'Unifont'
-		uc_injector = KW.InjectorDropDown(dropdown_list=UC_CHUNKS, button_text='+', target=self.uc_input, inject_identifier='UC')
-		
-		uc_buttons_layout.add_widget(uc_injector)
+		self.uc = KW.FPrompt(size_hint=(1, 1), size=(100, GS.UI_field_height*4), tooltip_types=['Negative Prompt/Undesired Content'])
+		self.uc.input.font_size = 23
+		self.uc.input.font_name = 'Unifont'
+
+		self.uc_dropdown = DropDown(auto_width=False,size_hint=(1, None))
+		self.uc_injector_button = Button(text='+', size_hint=(None, 1), width=GS.UI_field_height, height=GS.UI_field_height*2)
+		self.uc_injector_button.bind(on_release=handle_exceptions(lambda *args: self.uc_dropdown.open(self.uc_injector_button)))
+
+		uc_buttons_layout.add_widget(self.uc_injector_button)
 		uc_buttons_layout.add_widget(self.uc_import)
 		
 		uc_layout = BoxLayout(orientation='horizontal')
-		uc_token_counter=KW.TokenCostBar(clip_calculator, MAX_TOKEN_COUNT, size_hint=(None, 1), width=20)
-		uc_layout.add_widget(self.uc_input)
-		uc_layout.add_widget(uc_token_counter)
-		self.uc_input.bind(text=uc_token_counter.calculate_token_cost)
-		# Create the f-string variant
-		self.uc_f_input = KW.PromptGrid(size_hint=(1, 1), size=(100, field_height*4), tooltip_types=['Negative Prompt/Undesired Content'])
-		uc_layout.add_widget(self.uc_f_input)
-		self.uc_f = KW.StateFButton(self.mode_switcher, self.uc_input, self.uc_f_input.prompt_inputs[0], uc_injector, uc_layout.children[1:], [uc_layout.children[0]], enabled=False)
-		uc_buttons_layout.add_widget(self.uc_f)
+		self.uc_token_counter=KW.TokenCostBar(self.uc.input, size_hint=(None, 1), width=20)
+		uc_layout.add_widget(self.uc)
+		uc_layout.add_widget(self.uc_token_counter)
+		self.uc.input.bind(text=self.uc_token_counter.update_rect)
 
-		# UC Content Strength
-		ucs_label = Label(text='NP Strength:', **l_row_size1)
-		self.ucs_import = KW.ImportButton(**imp_row_size1)
-		ucs_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=field_height)
+		uc_row.add_widget(uc_label)
+		uc_row.add_widget(uc_buttons_layout)
+		uc_row.add_widget(uc_layout)
+		self.input_layout.add_widget(uc_row)
 
-		ucs_slider = Slider(min=0, max=500, value=100, size_hint=(1, None), height=field_height)
-		self.ucs_input = KW.FScrollInput(min_value=0, max_value=1000, fi_mode='hybrid_float', text='100', size_hint=(None, None), width=200, height=field_height, font_name='Unifont')
-		ucs_percent_label = Label(text='%', size_hint=(None, None), width=40, height=field_height)
-		ucs_slider.bind(value=handle_exceptions(lambda instance, value: setattr(self.ucs_input, 'text', str(value))))
+		# Decrisper
+		decrisp_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
+		decrisp_label = Label(text='Dyn. Thresh.:', **GS.l_row_size)
+		self.decrisp_import = KW.ImportButton(**GS.imp_row_size)
+		self.decrisp_button = KW.StateShiftButton(text='Decrisper', size_hint=(None, None), size=(90,GS.UI_field_height))
+		decrisp_scale = Label(text='Mimic Scale:', size_hint=(None, None), size=(100, GS.UI_field_height))
+		self.decrisp_guidance_input = KW.FScrollInput(min_value=-10000, max_value=10000, fi_mode='hybrid_float', increment=0.1, text='10', multiline=False, size_hint=(1, None), size=(100, GS.UI_field_height), font_size=font_small,font_name='Unifont')
+		decrisp_percentile = Label(text='Percentile:', size_hint=(None, None), size=(90, GS.UI_field_height))
+		self.decrisp_percentile_input = KW.FScrollInput(min_value=0.000001, max_value=1, fi_mode='hybrid_float', increment=0.001, text='0.999', multiline=False, size_hint=(1, None), size=(100, GS.UI_field_height), round_value=6, font_size=font_small,font_name='Unifont')
+		decrisp_layout = BoxLayout(orientation='horizontal',size_hint=(1, None), height=GS.UI_field_height)
+		decrisp_layout.add_widget(self.decrisp_button)
+		decrisp_layout.add_widget(decrisp_scale)
+		decrisp_layout.add_widget(self.decrisp_guidance_input)
+		decrisp_layout.add_widget(decrisp_percentile)
+		decrisp_layout.add_widget(self.decrisp_percentile_input)
 
-		ucs_layout.add_widget(ucs_slider)
-		ucs_layout.add_widget(self.ucs_input)
-		ucs_layout.add_widget(ucs_percent_label)
-
-		# Collage Dimensions
-		cc_dim_label = Label(text='Collage Dim.:', **l_row_size1)
-		self.cc_dim_import = KW.ImportButton(**imp_row_size1)
-		cc_dim_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=field_height)
-		cc_dim_width_label = Label(text='Columns:', size_hint=(None, None), width=80, height=field_height)
-		self.cc_dim_width = KW.ScrollInput(text='3', size_hint=(1, None), width=60, height=field_height, tooltip_types=['Cluster Columns'])
-		cc_dim_height_label = Label(text='Rows:', size_hint=(None, None), width=80, height=field_height)
-		self.cc_dim_height = KW.ScrollInput(text='3', size_hint=(1, None), width=60, height=field_height, tooltip_types=['Cluster Rows'])
-		cc_dim_layout.add_widget(cc_dim_width_label)
-		cc_dim_layout.add_widget(self.cc_dim_width)
-		cc_dim_layout.add_widget(cc_dim_height_label)
-		cc_dim_layout.add_widget(self.cc_dim_height)
-
-		# Image Sequence Quantity
-		is_range_label = Label(text='Quantity/FPS:', **l_row_size1)
-		self.is_range_import = KW.ImportButton(**imp_row_size1)
-		is_range_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=field_height)
-		self.is_quantity = KW.ScrollInput(text='28', min_value=1, max_value=100000, size_hint=(1, None), width=60, height=field_height, tooltip_types=['Image Quantity'])
-		self.is_video = KW.StateShiftButton(text='🎬',font_name='NotoEmoji')
-		is_range_layout.add_widget(self.is_quantity)
-		is_range_layout.add_widget(self.is_video)
-		is_fps_label = Label(text='FPS:', size_hint=(None, None), size=(60,field_height))
-		self.is_fps = KW.ScrollInput(text=str(GS.BASE_FPS), min_value=1, max_value=144, size_hint=(1, None), width=60, height=field_height)
-		is_range_layout.add_widget(is_fps_label)
-		is_range_layout.add_widget(self.is_fps)
+		decrisp_row.add_widget(decrisp_label)
+		decrisp_row.add_widget(self.decrisp_import)
+		decrisp_row.add_widget(decrisp_layout)
+		self.input_layout.add_widget(decrisp_row)
 
 		# Action buttons
-		action_buttons_label = Label(text='Create images:', **l_row_size1)
-		action_buttons_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=field_height)
-		self.single_img_button = Button(text='Generate Image', size_hint=(1, None), height=field_height, tooltip_types=['Generate Image'])
+		action_buttons_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
+		action_buttons_label = Label(text='Create images:', **GS.l_row_size)
+		action_buttons_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=GS.UI_field_height)
+		self.single_img_button = Button(text='Generate Image', size_hint=(1, None), height=GS.UI_field_height, tooltip_types=['Generate Image'])
 		self.single_img_button.bind(on_release=self.generate_single_image)
-		self.queue_button = Button(text='Queue Task', size_hint=(1, None), height=field_height, tooltip_types=['Queue Task'])
+		self.queue_button = Button(text='Queue Task', size_hint=(1, None), height=GS.UI_field_height, tooltip_types=['Queue Task'])
 		self.queue_button.bind(on_release=self.on_queue_button_press)
-		self.process_button = Button(text='Process Tasks', size_hint=(1, None), height=field_height, tooltip_types=['Process Tasks'])
+		self.process_button = Button(text='Process Tasks', size_hint=(1, None), height=GS.UI_field_height, tooltip_types=['Process Tasks'])
 		self.process_button.bind(on_release=self.on_process_button_press)
 		action_buttons_layout.add_widget(self.single_img_button)
 		action_buttons_layout.add_widget(self.queue_button)
 		action_buttons_layout.add_widget(self.process_button)
-
-		# Add all elements to self.input_layout, which is the primary block for interactions on the left, split into the label/button/input columns
-		self.input_layout.add_widget(mode_label)
-		self.input_layout.add_widget(settings_button)
-		self.input_layout.add_widget(mode_switcher_layout)
-
-		self.input_layout.add_widget(generation_provider_label)
-		self.input_layout.add_widget(self.generation_provider_import)
-		self.input_layout.add_widget(self.generation_provider_button)
-
-		self.input_layout.add_widget(name_label)
-		self.input_layout.add_widget(self.name_import)
-		self.input_layout.add_widget(self.name_input)
-
-		self.input_layout.add_widget(folder_name_label)
-		self.input_layout.add_widget(self.folder_name_import)
-		self.input_layout.add_widget(self.folder_name_input)
-
-		self.input_layout.add_widget(self.model_label)
-		self.input_layout.add_widget(self.model_import)
-		self.input_layout.add_widget(self.model_button)
-
-		self.input_layout.add_widget(cc_seed_label)
-		self.input_layout.add_widget(self.cc_seed_import)
-		self.input_layout.add_widget(self.cc_seed_grid)
-
-		self.input_layout.add_widget(is_seed_label)
-		self.input_layout.add_widget(self.is_seed_import)
-		self.input_layout.add_widget(is_seed_layout)		
-
-		self.input_layout.add_widget(steps_label)
-		self.input_layout.add_widget(self.steps_import)
-		self.input_layout.add_widget(steps_super_layout)	
-
-		self.input_layout.add_widget(guidance_label)
-		self.input_layout.add_widget(self.guidance_import)
-		self.input_layout.add_widget(guidance_super_layout)
-
-		self.input_layout.add_widget(sampler_label)
-		self.input_layout.add_widget(self.sampler_import)
-		self.input_layout.add_widget(sampler_layout)		
-
-		self.input_layout.add_widget(decrisp_label)
-		self.input_layout.add_widget(self.decrisp_import)
-		self.input_layout.add_widget(decrisp_layout)
-
-		self.input_layout.add_widget(resolution_label)
-		self.input_layout.add_widget(self.resolution_import)
-		self.input_layout.add_widget(self.resolution_selector)
-
-		self.input_layout.add_widget(prompt_label)
-		self.input_layout.add_widget(prompt_buttons_layout)
-		self.input_layout.add_widget(prompt_layout)
-
-		self.input_layout.add_widget(uc_label)
-		self.input_layout.add_widget(uc_buttons_layout)
-		self.input_layout.add_widget(uc_layout)
-
-		#self.input_layout.add_widget(ucs_label)
-		#self.input_layout.add_widget(self.ucs_import)
-		#self.input_layout.add_widget(ucs_layout)
-
-		self.input_layout.add_widget(cc_dim_label)
-		self.input_layout.add_widget(self.cc_dim_import)
-		self.input_layout.add_widget(cc_dim_layout)
-
-		self.input_layout.add_widget(is_range_label)
-		self.input_layout.add_widget(self.is_range_import)
-		self.input_layout.add_widget(is_range_layout)
-
-		self.input_layout.add_widget(action_buttons_label)
-		self.input_layout.add_widget(Label(text='',size_hint=(None, None),size=(0,0)))
-		self.input_layout.add_widget(action_buttons_layout)
+		
+		action_buttons_row.add_widget(action_buttons_label)
+		action_buttons_row.add_widget(Label(text='', size_hint=(None, None), size=(0,0)))
+		action_buttons_row.add_widget(action_buttons_layout)
+		self.input_layout.add_widget(action_buttons_row)
 
 		# In the middle is the self.meta_layout with the console and some more relevant buttons
-		task_state_layout = BoxLayout(orientation='vertical', size_hint=(1, None), height=field_height*5)
+		task_state_layout = BoxLayout(orientation='vertical', size_hint=(1, None), height=GS.UI_field_height*5)
 		
-		self.import_buttons = [self.name_import, self.folder_name_import, self.model_import, self.cc_seed_import, self.is_seed_import,
+		self.import_buttons = [self.generation_provider_import, self.name_import, self.folder_name_import, self.model_import, self.cc_seed_import, self.is_seed_import,
 			self.steps_import, self.guidance_import, self.sampler_import, self.resolution_import, self.prompt_import, self.uc_import,
-			self.cc_dim_import, self.is_range_import, self.decrisp_import, self.ucs_import]
+			self.cc_dim_import, self.is_range_import, self.decrisp_import]
 
 		activate_all_imports_button = KW.Button(text='Import All', text_color_dict = GS.theme["SBtnText"], bg_color_dict=GS.theme["SBtnBgOn"])
 		activate_all_imports_button.bind(on_release=handle_exceptions(lambda *args: [setattr(button, 'enabled', True) for button in self.import_buttons[:]]))
 		deactivate_all_imports_button = KW.Button(text='Import None', text_color_dict = GS.theme["SBtnText"], bg_color_dict=GS.theme["SBtnBgOff"])
 		deactivate_all_imports_button.bind(on_release=handle_exceptions(lambda *args: [setattr(button, 'enabled', False) for button in self.import_buttons[:]]))
 
-		import_adjust_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=field_height)
+		import_adjust_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=GS.UI_field_height)
 		import_adjust_layout.add_widget(activate_all_imports_button)
 		import_adjust_layout.add_widget(deactivate_all_imports_button)
 
-		task_state_counters_queued_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=field_height)
-		queued_tasks_label = Label(text='Queued tasks: 0', halign = 'left', **l_row_size1, size_hint_x=0.5)
+		task_state_counters_queued_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=GS.UI_field_height)
+		queued_tasks_label = Label(text='Queued tasks: 0', halign = 'left', **GS.l_row_size, size_hint_x=0.5)
 		GS.bind(queued_tasks=lambda instance, value: setattr(queued_tasks_label, 'text', "Queued tasks: " + str(value)))
-		queued_images_label = Label(text='Queued images: 0', **l_row_size1, size_hint_x=0.5, halign = 'right')
+		queued_images_label = Label(text='Queued images: 0', **GS.l_row_size, size_hint_x=0.5, halign = 'right')
 		GS.bind(queued_images=lambda instance, value: setattr(queued_images_label, 'text', "Queued images: " + str(value)))
 		task_state_counters_queued_layout.add_widget(queued_tasks_label)
 		task_state_counters_queued_layout.add_widget(queued_images_label)
 		
-		task_state_counters_done_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=field_height)
-		finished_tasks_label = Label(text='Finished tasks: 0', halign = 'left', **l_row_size1, size_hint_x=0.5)
+		task_state_counters_done_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=GS.UI_field_height)
+		finished_tasks_label = Label(text='Finished tasks: 0', halign = 'left', **GS.l_row_size, size_hint_x=0.5)
 		GS.bind(finished_tasks=lambda instance, value: setattr(finished_tasks_label, 'text', "Finished tasks: " + str(value)))
-		produced_images_label = Label(text='Produced images: 0', **l_row_size1, size_hint_x=0.5)
+		produced_images_label = Label(text='Produced images: 0', **GS.l_row_size, size_hint_x=0.5)
 		GS.bind(produced_images=lambda instance, value: setattr(produced_images_label, 'text', "Produced images: " + str(value)))
 		task_state_counters_done_layout.add_widget(finished_tasks_label)
 		task_state_counters_done_layout.add_widget(produced_images_label)
 		
-		task_state_counters_skipped_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=field_height)
-		skipped_tasks_label = Label(text='Skipped tasks: 0', halign = 'left', **l_row_size1, size_hint_x=0.5)
+		task_state_counters_skipped_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=GS.UI_field_height)
+		skipped_tasks_label = Label(text='Skipped tasks: 0', halign = 'left', **GS.l_row_size, size_hint_x=0.5)
 		GS.bind(skipped_tasks=lambda instance, value: setattr(skipped_tasks_label, 'text', "Skipped tasks: " + str(value)))
-		skipped_images_label = Label(text='Skipped images: 0', **l_row_size1, size_hint_x=0.5)
+		skipped_images_label = Label(text='Skipped images: 0', **GS.l_row_size, size_hint_x=0.5)
 		GS.bind(skipped_images=lambda instance, value: setattr(skipped_images_label, 'text', "Skipped images: " + str(value)))
 		task_state_counters_skipped_layout.add_widget(skipped_tasks_label)
 		task_state_counters_skipped_layout.add_widget(skipped_images_label)
 
-		wait_time_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=field_height)
-		wait_time_label = Label(text='Wait time:', halign = 'left', **l_row_size1, size_hint_x=None)
-		self.wait_time_input = KW.ScrollInput(text='1', fi_mode=float, min_value=0, size_hint=(1, None), width=60, height=field_height)
+		wait_time_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=GS.UI_field_height)
+		wait_time_label = Label(text='Wait time:', halign = 'left', **GS.l_row_size, size_hint_x=None)
+		self.wait_time_input = KW.ScrollInput(text='1', fi_mode=float, min_value=0, size_hint=(1, None), width=60, height=GS.UI_field_height)
 		wait_time_layout.add_widget(wait_time_label)
 		wait_time_layout.add_widget(self.wait_time_input)
 		
-		task_state_buttons_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=field_height)
-		self.cancel_button = Button(text='⬛', font_name='Unifont',size_hint=(None, None), size=(field_height,field_height))
+		task_state_buttons_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=GS.UI_field_height)
+		self.cancel_button = Button(text='⬛', font_name='Unifont',size_hint=(None, None), size=(GS.UI_field_height,GS.UI_field_height))
 		self.cancel_button.bind(on_release=handle_exceptions(lambda instance: setattr(GS.MAIN_APP.pause_button, 'enabled', True)))
 		self.cancel_button.bind(on_release=handle_exceptions(lambda instance: setattr(GS, 'cancel_request', True)))
-		self.pause_button = KW.PauseButton(**imp_row_size1)
-		overwrite_button = KW.StateShiftButton(text='Overwrite Images', size_hint=(0.6, None), height=field_height, font_size=font_small, tooltip_types=['Overwrite Images'])
+		self.pause_button = KW.PauseButton(**GS.imp_row_size)
+		overwrite_button = KW.StateShiftButton(text='Overwrite Images', size_hint=(0.6, None), height=GS.UI_field_height, font_size=font_small, tooltip_types=['Overwrite Images'])
 		overwrite_button.bind(on_release=handle_exceptions(lambda instance: setattr(GS, 'overwrite_images', not GS.overwrite_images)))
-		self.wipe_queue_button = Button(text='Wipe Queue', size_hint=(0.4, None), height=field_height, tooltip_types=['Wipe Queue'])
+		self.wipe_queue_button = Button(text='Wipe Queue', size_hint=(0.4, None), height=GS.UI_field_height, tooltip_types=['Wipe Queue'])
 		self.wipe_queue_button.bind(on_release=IM_G.wipe_queue)
 		task_state_buttons_layout.add_widget(self.pause_button)
 		task_state_buttons_layout.add_widget(self.cancel_button)
@@ -601,7 +614,7 @@ class ClusterVisionF(App):
 		self.metadata_viewer = KW.MetadataViewer()
 		self.image_organization_layout.add_widget(self.metadata_viewer)
 
-		image_lists_layout = BoxLayout(orientation='horizontal', size_hint_y = None, height = field_height*1)
+		image_lists_layout = BoxLayout(orientation='horizontal', size_hint_y = None, height = GS.UI_field_height*1)
 
 		self.loaded_images_dropdown = KW.PermissiveDropDown(auto_width=False,size_hint=(1, None))
 		self.loaded_images_button = KW.Button(text = 'Loaded Images', tooltip_types=['Loaded images'])
@@ -617,7 +630,7 @@ class ClusterVisionF(App):
 		self.show_last_generation_button = KW.StateShiftButton(text='Show Last Generation', enabled=True, tooltip_types=['Show Last Generation'])
 		image_lists_layout.add_widget(self.show_last_generation_button)
 
-		purge_and_switch_layout = BoxLayout(orientation='horizontal', size_hint_y = None, height = field_height*1)
+		purge_and_switch_layout = BoxLayout(orientation='horizontal', size_hint_y = None, height = GS.UI_field_height*1)
 		self.purge_loaded_images_button = KW.ConfirmButton(
 			lambda: [child.self_destruct() for child in self.loaded_images_dropdown.children[0].children[:]] or None,
 			text='Purge Loaded Images', tooltip_types=['Purge'])
@@ -640,15 +653,17 @@ class ClusterVisionF(App):
 		self.super_layout.add_widget(self.meta_layout)
 		self.super_layout.add_widget(self.image_organization_layout)
 
-		self.cc_exclusive_widgets = [cc_seed_label, self.cc_seed_import, self.cc_seed_grid,
-			cc_dim_label, self.cc_dim_import, cc_dim_layout]
-		self.is_exclusive_widgets = [is_seed_label, self.is_seed_import, is_seed_layout,
-			is_range_label, self.is_range_import, is_range_layout]
-		self.non_cs_widgets = [is_seed_label, self.is_seed_import, is_seed_layout]
+		self.cc_exclusive_widgets = [cc_seed_row, cc_dim_row]
+		self.is_exclusive_widgets = [is_seed_row, is_range_row]
+		self.non_cs_widgets = [is_seed_row]
 
-		self.mode_switcher.hide_widgets([*self.is_exclusive_widgets, self.metadata_viewer])
+		GS.hide_widgets([*self.is_exclusive_widgets, self.metadata_viewer])
 		self.pause_button.disabled = True
 		self.cancel_button.disabled = True
+
+		for provider_name, provider in GS.MODULE_FACTORY.providers.items():
+			provider.initialize_ui()
+		#self.generation_provider_dropdown.bind(on_select=handle_exceptions(lambda instance, btn: GS.MODULE_FACTORY.providers[btn.text].switch_to()))
 
 		#Window.size = [1916, 2003] # These are test values I would use when making the application able to remember it's last window size/pos
 		#Window.left = 854 # Unfortunately right now, and for the better part of a decade kivy (or SDL downstream) quietly applies the system scaling when using Window.size
@@ -691,7 +706,8 @@ class ClusterVisionF(App):
 			'name': self.name_input.text,
 			'folder_name': self.folder_name_input.text,
 			'folder_name_extra': '',
-			'model': self.model_button.text,
+			'provider': GS.MODULE_FACTORY.selected_provider,
+			'model': self.model_button.gen_value,
 			'seed': int(seed),
 			'sampler': self.get_sampler_setting(),
 			'scale': self.guidance_input_f.text if self.guidance_f.enabled else float(self.guidance_input_min.text),
@@ -699,9 +715,8 @@ class ClusterVisionF(App):
 			'steps': self.steps_input_f.text if self.steps_f.enabled else int(self.steps_slider_min.value),
 			'img_mode': {'width': int(self.resolution_selector.resolution_width.text),
 								'height': int(self.resolution_selector.resolution_height.text)},
-			'prompt': [self.prompt_f_input.prompt_inputs[i].text for i in range(self.prompt_f_input.prompt_rows)] if self.prompt_f.enabled else self.prompt_input.text,
-			'negative_prompt': [self.uc_f_input.prompt_inputs[i].text for i in range(self.uc_f_input.prompt_rows)] if self.uc_f.enabled else self.uc_input.text,
-			'negative_prompt_strength': self.ucs_input.text,
+			'prompt': self.prompt.input.text,
+			'negative_prompt': self.uc.input.text,
 			'dynamic_thresholding': self.decrisp_button.enabled,
 			'dynamic_thresholding_mimic_scale': self.decrisp_guidance_input.text if self.decrisp_button.enabled else 10,
 			'dynamic_thresholding_percentile': self.decrisp_percentile_input.text if self.decrisp_button.enabled else 0.999,
@@ -714,7 +729,7 @@ class ClusterVisionF(App):
 			return
 		if self.check_settings(None, settings):
 			return
-		settings.update(IM_G.decode_sampler_string(settings["sampler"]))
+		settings.update(IM_G.decode_sampler_string(settings["sampler"], settings["provider"]))
 		self.single_img_button.disabled = True
 		self.process_button.disabled = True
 		self.cancel_button.disabled = False
@@ -726,9 +741,6 @@ class ClusterVisionF(App):
 	@handle_exceptions
 	def on_queue_button_press(self, instance):
 		# Get shared settings from text inputs and sliders
-		name = self.name_input.text
-		folder_name = self.folder_name_input.text
-		model = self.model_button.text
 		if self.steps_f.enabled:
 			steps = self.steps_input_f.text
 		else:
@@ -744,16 +756,11 @@ class ClusterVisionF(App):
 		guidance_rescale = self.guidance_rescale_input_f.text
 		img_mode = {'width': int(self.resolution_selector.resolution_width.text),
 								'height': int(self.resolution_selector.resolution_height.text)}
-		if self.prompt_f.enabled:
-			prompt = [self.prompt_f_input.prompt_inputs[i].text for i in range(self.prompt_f_input.prompt_rows)]
-		else:
-			prompt = self.prompt_input.text
-		if self.uc_f.enabled:
-			uc = [self.uc_f_input.prompt_inputs[i].text for i in range(self.uc_f_input.prompt_rows)]
-		else:
-			uc = self.uc_input.text
-		settings = {'name': name, 'folder_name': folder_name, 'model': model, 'scale': scale, 'guidance_rescale': guidance_rescale, 'steps': steps, 'img_mode': img_mode,
-		'prompt': prompt, 'negative_prompt': uc, 'dynamic_thresholding': self.decrisp_button.enabled, 'negative_prompt_strength': self.ucs_input.text,
+		prompt = self.prompt.input.text
+		uc = self.uc.input.text
+		settings = {'name': self.name_input.text, 'folder_name': self.folder_name_input.text, 'provider': GS.MODULE_FACTORY.selected_provider,
+		'model': self.model_button.gen_value, 'scale': scale, 'guidance_rescale': guidance_rescale, 'steps': steps, 'img_mode': img_mode, 'prompt': prompt,
+		'negative_prompt': uc, 'dynamic_thresholding': self.decrisp_button.enabled,
 		'dynamic_thresholding_mimic_scale': self.decrisp_guidance_input.text if self.decrisp_button.enabled else 10,
 		'dynamic_thresholding_percentile': self.decrisp_percentile_input.text if self.decrisp_button.enabled else 0.999,}
 
@@ -837,7 +844,7 @@ class ClusterVisionF(App):
 			else:
 				sampler = self.sampler_input.text.replace(" ", "")
 		else:
-			sampler = self.sampler_button.text + '_' + self.noise_schedule_button.text
+			sampler = self.sampler_button.gen_value + '_' + self.noise_schedule_button.text
 			if self.sampler_dyn.enabled:
 				sampler+='_dyn'
 			elif self.sampler_smea.enabled:
@@ -871,7 +878,7 @@ class ClusterVisionF(App):
 	def switch_processing_state(self, processing):
 		self.single_img_button.disabled = processing
 		self.queue_button.disabled = processing
-		self.process_button.disabled = processing 
+		self.process_button.disabled = processing
 		self.wipe_queue_button.disabled = processing
 		self.cancel_button.disabled = not processing
 		self.pause_button.disabled = not processing

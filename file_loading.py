@@ -157,7 +157,7 @@ def dropped_file_processor(window, file_path, single, location):
 	elif single:
 		if file_path.endswith('.py'):
 			load_settings_from_py(file_path)
-		elif file_path.endswith('.jpg') or file_path.endswith('.png'):
+		elif file_path.endswith('.jpg') or file_path.endswith('.png') or file_path.endswith('.webp'):
 			if location == 'left':
 				load_settings_from_image(file_path)
 			else:
@@ -165,7 +165,7 @@ def dropped_file_processor(window, file_path, single, location):
 	else: # Multi
 		if file_path.endswith('.py'):
 			bulk_queue(file_path)
-		if file_path.endswith('.jpg') or file_path.endswith('.png'):
+		if file_path.endswith('.jpg') or file_path.endswith('.png') or file_path.endswith('.webp'):
 			GS.MAIN_APP.loaded_images_dropdown.add_widget(KW.ImageGenerationEntry(file_path))
 
 # When importing multiple CVF settings files this function handles putting them immediately into the queue, for instance for test cases
@@ -185,9 +185,6 @@ def bulk_queue(file_path):
 		if not settings.get('dynamic_thresholding'):
 			settings["dynamic_thresholding"] = False
 			print(f'[Warning] Failed to load dynamic_thresholding from file, falling back to False')
-		if not settings.get('negative_prompt_strength'):
-			settings["negative_prompt_strength"] = '100'
-			print(f'[Warning] Failed to load negative_prompt_strength from file, falling back to 100')
 		if not settings.get('negative_prompt'):
 			settings["negative_prompt"] = settings["UC"]
 		# Support for legacy file format that still put the F wrapping into the files
@@ -266,7 +263,17 @@ def load_settings_from_py(file_path):
 			# Load the settings using the try_to_load function
 			try_to_load('name', GS.MAIN_APP.name_input, settings, 'name', GS.MAIN_APP.name_import.enabled, 'text')
 			try_to_load('folder_name', GS.MAIN_APP.folder_name_input, settings, 'folder_name', GS.MAIN_APP.folder_name_import.enabled, 'text')
-			try_to_load('model', GS.MAIN_APP.model_button, settings, 'model', GS.MAIN_APP.model_import.enabled, 'text')
+			provider_name = settings.get('provider', None)
+			if provider_name:
+				try:
+					GS.MODULE_FACTORY.providers[provider_name].switch_to()
+				except:
+					print(f'[Warning] Failed to switch provider')
+			try:
+				GS.MAIN_APP.model_button.gen_value=settings["model"]
+				GS.MAIN_APP.model_button.text=GS.MODULE_FACTORY.selected_provider.CONSTANTS['MODELS'][settings["model"]]
+			except:
+				print(f'[Warning] Failed to set model, the setting may be invalid')
 			if GS.MAIN_APP.steps_import.enabled: 
 				if type(settings["steps"]) == str:
 					GS.MAIN_APP.steps_f.enabled = True
@@ -299,11 +306,12 @@ def load_settings_from_py(file_path):
 			try_to_load('img_mode_height', GS.MAIN_APP.resolution_selector.resolution_height, settings, ['img_mode', 'height'], GS.MAIN_APP.resolution_import.enabled, 'text')
 			if GS.MAIN_APP.prompt_import.enabled:
 				if type(settings["prompt"])!=str:
-					GS.MAIN_APP.prompt_f.enabled = True
-					GS.MAIN_APP.prompt_f_input.load_prompts(settings["prompt"])
+					try:
+						GS.MAIN_APP.prompt.input.text = str(settings["prompt"][i])
+					except:
+						print(f'Prompt loading failed')
 				else:
-					GS.MAIN_APP.prompt_f.enabled = False
-					try_to_load('prompt', GS.MAIN_APP.prompt_input, settings, 'prompt', True, 'text')
+					try_to_load('prompt', GS.MAIN_APP.prompt.input, settings, 'prompt', True, 'text')
 			if GS.MAIN_APP.uc_import.enabled:
 				if settings.get('negative_prompt'):
 					uc_label='negative_prompt'
@@ -312,16 +320,15 @@ def load_settings_from_py(file_path):
 				else:
 					uc_label=None
 				if uc_label==None:
-					GS.MAIN_APP.uc_f.enabled = False
-					GS.MAIN_APP.uc_input.text = ''
+					GS.MAIN_APP.uc.input.text = ''
 				else:
 					if type(settings[uc_label])!=str:
-						GS.MAIN_APP.uc_f.enabled = True
-						GS.MAIN_APP.uc_f_input.load_prompts(settings[uc_label])
+						try:
+							GS.MAIN_APP.uc.input.text = str(settings[uc_label][i])
+						except:
+							print(f'UC loading failed')
 					else:
-						GS.MAIN_APP.uc_f.enabled = False
-						try_to_load('negative_prompt', GS.MAIN_APP.uc_input, settings, uc_label, True, 'text')
-			try_to_load('negative_prompt_strength', GS.MAIN_APP.ucs_input, settings, 'negative_prompt_strength', GS.MAIN_APP.ucs_import.enabled, 'text', 100)
+						try_to_load('negative_prompt', GS.MAIN_APP.uc.input, settings, uc_label, True, 'text')
 			try_to_load('noise_schedule', GS.MAIN_APP.noise_schedule_button, settings, 'noise_schedule', GS.MAIN_APP.sampler_import.enabled, 'text', 'default')
 			if settings.get('collage_dimensions'):
 				try_to_load('collage_dimensions', GS.MAIN_APP.cc_dim_width, settings, ['collage_dimensions', 0], GS.MAIN_APP.cc_dim_import.enabled, 'text')
@@ -435,26 +442,19 @@ def load_settings_from_image(file_path):
 			GS.MAIN_APP.name_input.text = os.path.splitext(os.path.basename(file_path))[0]
 		except:
 			print(f'[Warning] Failed to set file name')
+
 	if GS.MAIN_APP.model_import.enabled:
 		if metadata.get('Source'):
-			if metadata["Source"] == 'Stable Diffusion 1D09D794' or metadata["Source"] == 'Stable Diffusion F64BA557': # Furry: V1.2/1.3 
-				GS.MAIN_APP.model_button.text = 'nai-diffusion-furry'
-			elif metadata["Source"] == 'Stable Diffusion 81274D13' or metadata["Source"] == 'Stable Diffusion 3B3287AF': # Anime Full V1: Initial release/silent update with ControlNet
-				GS.MAIN_APP.model_button.text = 'nai-diffusion'
-			elif metadata["Source"] == 'Stable Diffusion 1D44365E' or metadata["Source"] == 'Stable Diffusion F4D50568': # Anime Safe V1: Initial release/silent update with ControlNet
-				GS.MAIN_APP.model_button.text = 'safe-diffusion'
-			elif metadata["Source"] == 'Stable Diffusion F1022D28': # Anime Full V2
-				GS.MAIN_APP.model_button.text = 'nai-diffusion-2'
-			elif metadata["Source"] == 'Stable Diffusion XL C1E1DE52' or metadata["Source"] == 'Stable Diffusion XL 8BA2AF87' or metadata["Source"] == 'Stable Diffusion XL 1120E6A9': # Anime Full V3/Inpaint V3
-				GS.MAIN_APP.model_button.text = 'nai-diffusion-3'
-			elif metadata["Source"] == 'Stable Diffusion XL 9CC2F394' or metadata["Source"] == 'Stable Diffusion XL C8704949': # Furry Full V3/Inpaint V3
-				GS.MAIN_APP.model_button.text = 'nai-diffusion-furry-3'
-			elif metadata["Source"] == 'Stable Diffusion': # This should normally not be encountered but some images in the past were generated like this due to a bug on NAI's side
-				print(f"[Warning] The loaded picture doesn't have the model specified. Defaulting to NAID Full V3, but be aware the original model for this picture might have been different")
-				GS.MAIN_APP.model_button.text = 'nai-diffusion-3'
+			claiming_provider = next((result for provider in GS.MODULE_FACTORY.list_providers().values()
+				if (result := provider.claim_model(metadata["Source"]))), None)
+			if claiming_provider == None:
+				print(f'[Warning] Failed to determine appropriate generation provider and/or model')
 			else:
-				print(f'[Warning] Error while determining model, defaulting to NAID Full V3')
-				GS.MAIN_APP.model_button.text = 'nai-diffusion-3'
+				print(claiming_provider)
+				claiming_provider[0].switch_to()
+				GS.MAIN_APP.model_button.text = claiming_provider[1]
+				GS.MAIN_APP.model_button.gen_value = claiming_provider[2]
+
 	GS.MAIN_APP.steps_f.enabled = False
 	GS.MAIN_APP.guidance_f.enabled = False
 	try_to_load('steps', GS.MAIN_APP.steps_slider_min, comment_dict, 'steps', GS.MAIN_APP.steps_import.enabled, 'value')
@@ -475,15 +475,24 @@ def load_settings_from_image(file_path):
 			sampler_string = comment_dict.get('sampler',False)
 			if sampler_string:
 				if sampler_string == 'nai_smea_dyn':
-					GS.MAIN_APP.sampler_button.text = 'k_euler_ancestral'
+					GS.MAIN_APP.sampler_button.text = 'Euler Ancestral'
+					GS.MAIN_APP.sampler_button.gen_value = 'k_euler_ancestral'
 					GS.MAIN_APP.sampler_smea.enabled = True
 					GS.MAIN_APP.sampler_dyn.enabled = True
 				elif sampler_string == 'nai_smea':
-					GS.MAIN_APP.sampler_button.text = 'k_euler_ancestral'
+					GS.MAIN_APP.sampler_button.text = 'Euler Ancestral'
+					GS.MAIN_APP.sampler_button.gen_value = 'k_euler_ancestral'
 					GS.MAIN_APP.sampler_smea.enabled = True
 					GS.MAIN_APP.sampler_dyn.enabled = False
 				else:
-					GS.MAIN_APP.sampler_button.text = sampler_string
+					sampler_string += ', '
+					GS.MAIN_APP.sampler_button.gen_value = sampler_string
+					key = next((k for k, v in GS.MODULE_FACTORY.selected_provider.CONSTANTS['SAMPLERS'].items() if v == sampler_string), None)
+					if key == None:
+						GS.MAIN_APP.sampler_button.text = sampler_string + ' (?)'
+						print(f'[Warning] Failed to determine the sampler from the list of the provider, the field might be in an invalid state')
+					else:
+						GS.MAIN_APP.sampler_button.text = key
 					if comment_dict.get('sm_dyn'):
 						if comment_dict["sm_dyn"]:
 							GS.MAIN_APP.sampler_smea.enabled = True
@@ -502,17 +511,13 @@ def load_settings_from_image(file_path):
 		try_to_load('dynamic_thresholding_mimic_scale', GS.MAIN_APP.decrisp_guidance_input, comment_dict, 'dynamic_thresholding_mimic_scale', True, 'text')
 		try_to_load('dynamic_thresholding_percentile', GS.MAIN_APP.decrisp_percentile_input, comment_dict, 'dynamic_thresholding_percentile', True, 'text')
 	if GS.MAIN_APP.prompt_import.enabled:
-		GS.MAIN_APP.prompt_f.enabled = False
 		if comment_dict.get('prompt'):
-			GS.MAIN_APP.prompt_input.text = comment_dict["prompt"]
+			GS.MAIN_APP.prompt.input.text = comment_dict["prompt"]
 		else:
-			try_to_load('prompt', GS.MAIN_APP.prompt_input, metadata,'Description', True, 'text')
+			try_to_load('prompt', GS.MAIN_APP.prompt.input, metadata,'Description', True, 'text')
 	if GS.MAIN_APP.uc_import.enabled:
-		GS.MAIN_APP.uc_f.enabled = False
 		if comment_dict.get('uc'):
-			GS.MAIN_APP.uc_input.text = comment_dict["uc"]
+			GS.MAIN_APP.uc.input.text = comment_dict["uc"]
 		else:
-			try_to_load('negative_prompt', GS.MAIN_APP.uc_input, comment_dict,'negative_prompt', True, 'text')
-	if try_to_load('negative_prompt_strength', GS.MAIN_APP.ucs_input, comment_dict, 'uncond_scale', GS.MAIN_APP.ucs_import.enabled, 'text', 100):
-		GS.MAIN_APP.ucs_input.text = str(float(GS.MAIN_APP.ucs_input.text)*100)
+			try_to_load('negative_prompt', GS.MAIN_APP.uc.input, comment_dict,'negative_prompt', True, 'text', '')
 	print(f'Loading from picture successful')

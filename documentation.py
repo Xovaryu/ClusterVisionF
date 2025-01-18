@@ -40,7 +40,7 @@ Generally staying at 28 steps is fine, and there isn't much benefit to more. Mor
 """This here is the main way of telling the AI in text what to generate. Your text gets "digested" into tokens (think of them like AI words), which are then processed further by the model to figure out what to create from the starting point its given, typically noise.
 Do yourself a favor, and don't get too caught up thinking of any AI models and the prompt in a too human way. Yes, your run-of-the-mill prompts like "1girl,sundress,forest" will generally work, and if what you have makes what you want, good.
 Models don't think about your prompt like a human would. For one, everything is a vector, and typically models will understand a lot more than just the main datasets you might think about, for NAID Anime models that would be Danbooru, and for Furry e621, both NSFW.
-Models may well understand symbols like ♥ for instance which at least for V1 was genuinely very useful, and still isn't useless. You can also separate your words with symbols and get sane results, like "1girl♥sundress♥forest", nothing is stopping you.
+Earlier models may well understand symbols like ♥ for instance which at least for V1 was genuinely very useful, and isn't useless until V4 which uses a different tokenizer, that is restricted to alphanumerical inputs and some select basic symbols.
 Also complex concepts that the AI is sort of able to understand, but not reliably so you may want to repeat instead of simply strengthening. "complex concept,complex concept,complex concept" may go a much longer way than just "{{complex concept}}" would.""",
 	'Negative Prompt/Undesired Content':
 """Mostly what it says it is. It works like the prompt, just that instead of biasing the AI towards the text, it steers it away from it. A simple "nsfw" in the UC can go a long way to make SFW images, (less so in newer more horny models).
@@ -58,7 +58,7 @@ When using img2img at very low strengths you also may be able and might even wan
 """This tiny field determines the cutoff numbers for samplers on a cluster collage, that is how many samplers are displayed per row. 0 is for all, so a complete horizontal display, 1 would be all aligned vertically.
 Be advised that you should pay attention to make your number of samplers cleanly divisible by the sampler cutoff, or you may run into issues with collage generation.""",
 	'Seed':
-"""This field used for the/a seed when generating. The seed is basically a predetermined random noise pattern from which the image is diffused. An empty field means that a new seed will be seed per image or task. Collages of course maintain picked seeds per cluster.
+"""This field used for the/a seed when generating. The seed is basically a predetermined random noise pattern from which the image is diffused. An empty field means that a new seed will be set per image or task. Collages of course maintain picked seeds per cluster.
 When your settings are otherwise good enough but the results are not satisfying, typically you would try again on new seeds. When making collages in particular it can be helpful to search for specific seeds to show special things, though be aware and honest about biases.
 When making cluster collages seeds provide the variable s in case you want to address them individually.
 Seed fields like these additionally support 4 quick operations via simple single button hotkeys:
@@ -114,7 +114,7 @@ This metadata viewer will attempt to display both the EXIF and NAID Alpha inform
 	'Process Tasks':
 """Processes all tasks in the queue, working through the images one by one. Be advised that ClusterVisionF is not a glorified autoclicker and excessive use of free Opus generations can get you rate limited and at worst banned. This UI itself is terms compliant, so it's up to you.
 As a general rule of thumb when using free generations, generate with CVF within limits of what you might be able to accomplish yourself. Don't generate 24/7, 1000 images is one thing, 10000 an entirely different thing. See 9.1.6 in the [u][ref=https://novelai.net/terms]NAI ToS[/ref][/u].
-Note that this does not apply to any Anlas costing and hence paid generations, go wild with them it's your money.""",
+Note that this does not apply to any Anlas costing and hence paid generations, go wild with them, it's your money.""",
 	'Image Quantity':
 """This value determines how many images are generated for a task. For image sequences this value here also directly determines the range of n. Since n starts at 0, if you put in a quantity of 4 here, you get 4 images with associated n values of 0, 1, 2 and 3.
 For cluster sequences this value instead determines the range of cc, and these numbers will be shown on the collage in the top left.""",
@@ -134,6 +134,10 @@ For this in particular when generating on an online service you will want to be 
 Check the tooltip of any F-Input for more details on the variables.""",
 	'Image Deletion':
 """If clicked twice within 3 seconds this image will be deleted out of the program memory. It will not delete any images that were saved to or came in for first place from your system.""",
+	'Import Button':
+"""These buttons determine what happens when a single image is dropped into the left of the UI to lead metadata, their associated fields only change when the button is active.""",
+	'Token Cost Bar':
+"""This bar shows how much of the available tokens for generation are being taken up by the current prompt. If the color turns purple that means that the prompt contains evaluated elements which are not counted and predicted.""",
 }# Left to implement: Settings, Themes, Sampler, Decrisper (partially deprecated in NAID tho), Model, Name, Folder Name, Wait Time
 # API token stuff and in general the stuff in the settings window, further seed grid descriptions
 HELP_TEXT = """ClusterVisionF is a bit of a complicated and unusual UI, but most text fields and buttons have tooltips attached that will explain their function and possible hotkeys.

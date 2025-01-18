@@ -77,76 +77,41 @@ GS.tracker = SummaryTracker()
 # 2. The primary function to generate images. Sends the request and will persist until it is fulfilled, then saves the image, and returns the path
 # Currently NAI specific
 @handle_exceptions
-def image_gen(auth,prompt,filepath,enumerator,token_test=False):
+def image_gen(prompt,filepath,enumerator,test=False):
 	skipped = False
 	retry_time=5
-	while GS.generate_images or token_test:
+	while GS.generate_images or test:
 		while not GS.MAIN_APP.pause_button.enabled:
 			time.sleep(0.2)
 		if GS.cancel_request:
 			print('Image generation cancelled')
 			return
-		api_header=f'Bearer {auth}'
-		if not GS.overwrite_images and not token_test:
+		if not GS.overwrite_images and not test:
 			if os.path.isfile(filepath):
 				print(f'[Warning] {filepath} is already present and has not been overwritten')
 				skipped = True
 				break
-		response = None
+		# This is the primary generation block, which ideally doesn't need to loop, but it will persist when an image fails to generate
+		# It has to, after all with likely future creation processes depending on all images being in place they would fail otherwise
 		try:
-			if True:
-				print(f'''{enumerator}\nDecrisp: {prompt[0]["parameters"]["dynamic_thresholding"]}{" | MS: " + str(prompt[0]["parameters"]["dynamic_thresholding_mimic_scale"]) + " | " + str(prompt[0]["parameters"]["dynamic_thresholding_percentile"]) + "%ile" if prompt[0]["parameters"]["dynamic_thresholding"] else ""}''')
-				print(f'''Model: {prompt[0]["model"]}\nPrompt:\n{prompt[0]["input"]}\nUC:\n{prompt[0]["parameters"]["negative_prompt"]}''')
+			#if True:
+				#print(f'''{enumerator}\nDecrisp: {prompt[0]["parameters"]["dynamic_thresholding"]}{" | MS: " + str(prompt[0]["parameters"]["dynamic_thresholding_mimic_scale"]) + " | " + str(prompt[0]["parameters"]["dynamic_thresholding_percentile"]) + "%ile" if prompt[0]["parameters"]["dynamic_thresholding"] else ""}''')
+				#print(f'''Model: {prompt[0]["model"]}\nPrompt:\n{prompt[0]["input"]}\nUC:\n{prompt[0]["parameters"]["negative_prompt"]}''')
 
 			start=time.time()
-			response=requests.post(GS.URL,json.dumps(prompt[0]),headers={'Authorization': api_header,'Content-Type': 'application/json','accept': 'application/json',})
+			generation=GS.MODULE_FACTORY.providers[GS.MAIN_APP.generation_provider_button.text].generate_image(prompt, test)
 			end=time.time()
 			processing_time=end-start
-			print(f'Response Time: {(processing_time)}s')
-			if token_test:
-				if response.status_code == 200:
-					return 'Success'
-				else:
-					return 'Error' # Passed to the testing function and reported there
+			print(f'Generation Time: {(processing_time)}s')
 			
-			
-			if response.status_code == 400 or response.status_code == 401:
-				print(f'[Warning] {response.status_code} | Server message: {json.loads(response.content)["message"]}')
-				return 'Error' # Reported above
-			elif response.status_code == 429:
-				print(f'[Warning] {response.status_code} | Server message: {json.loads(response.content)["message"]}')
-				raise ValueError('Server refused to respond with an image due to specific circumstances.')
-			elif response.status_code >= 402 and response.status_code < 500:
-				print(f'[Warning] {response.status_code} | Server message: {json.loads(response.content)["message"]}')
-				return 'Error' # Reported above
-			elif response.status_code >= 500:
-				print(f'[Warning] {response.status_code} | Server message: {json.loads(response.content)["message"]}')
-				raise ValueError('Server failed to respond with an image.')
-
-			with zipfile.ZipFile(io.BytesIO(response.content), "r") as zip_file:
-				for file_name in zip_file.namelist():
-					if file_name.endswith(".png"):
-						with zip_file.open(file_name) as png_file:
-							image_data = png_file.read()
-							Clock.schedule_once(lambda dt: GS.MAIN_APP.generated_images_dropdown.add_widget(
-							KW.ImageGenerationEntry(image_data, GS.MAIN_APP.show_last_generation_button.enabled, True)))
-							with open(filepath, 'wb+') as t:
-								t.write(image_data)
-							t.close()
+			if test and (generation == 'Success' or generation == 'Error'):
+				return generation
+			GS.MODULE_FACTORY.providers[GS.MAIN_APP.generation_provider_button.text].handle_result(generation, filepath)
 			break
 		except:
 			traceback.print_exc() if GS.verbose else None
-			if token_test:
+			if test:
 				return 'Error' # Passed to the testing function and reported there
-			if response == None:
-				print(f'[Warning] Failed to get any server response')
-			elif response.status_code >= 500:
-				try:
-					print(f'[Warning] {response.status_code} | Server message: {json.loads(response.content)["message"]}')
-				except:
-					print(f'[Warning] {response.status_code} | No proper server message received')
-			else:
-				None if GS.verbose else traceback.print_exc()
 			print(f'[Warning] Creation error encounted. Retrying after: {min(retry_time,15)}s')
 			for i in range(min(retry_time,15)):
 				time.sleep(1)
@@ -413,12 +378,6 @@ def attach_metadata_header(img_collages,settings,name_extra, cc=''):
 		line_height*currently_used_lines, left_meta_block, available_lines, line_height, (255,255,255,0), break_symbol = '|')
 	currently_used_lines=currently_used_lines+used_lines_decrisper
 
-	# Undesired Content Strength
-	available_lines = available_lines - used_lines_decrisper
-	draw, img_header, used_lines_ucs, _=TM.fallback_font_writer(draw, img_header, 'Undesired Content Strength: '+settings["negative_prompt_strength"]+'%', 10,
-		line_height*currently_used_lines, left_meta_block, available_lines, line_height, (255,255,255,0), break_symbol = ',')
-	currently_used_lines=currently_used_lines+used_lines_ucs
-
 	#Draw the prompt and UC on the right side
 	full_prompt=settings["prompt"]
 	draw, img_header, used_lines_prompt, _=TM.fallback_font_writer(draw, img_header, full_prompt, left_meta_block, line_height*0, img_collages.size[0]-left_meta_block,
@@ -558,20 +517,20 @@ def create_image_stripe(subimages, stripe_width, line_height):
 
 # 7. Simply formats and passes the prompt to image_gen, used for simple generations, complex external logic or an auth token test
 @handle_exceptions
-def generate_as_is(settings,enumerator,token_test=False,token=''):
-	if token_test: #This is the raw testing dict used when evaluating whether a NAI user token us usable or not
+def generate_as_is(settings,enumerator,test=False,token=''):
+	if test: #This is the raw testing dict used when evaluating whether a NAI user token us usable or not
 		settings = {'name': 'Test', 'folder_name': '', 'folder_name_extra': '', 'model': 'nai-diffusion-2', 'seed': 0, 'sampler': 'k_euler_ancestral', 'noise_schedule': 'native', 'scale': 10.0,
 			'steps': 1, 'img_mode': {'width': 64, 'height': 64}, 'prompt': 'Test', 'negative_prompt': 'Test', 'smea': False, 'dyn': False, 'dynamic_thresholding': False,
-			'dynamic_thresholding_mimic_scale': 10, 'dynamic_thresholding_percentile': 0.999, 'guidance_rescale': 0, 'negative_prompt_strength': 1}
-		GS.MAIN_APP.config_window.process_token_callback(image_gen(token,module_factory.providers[GS.MAIN_APP.generation_provider_button.text].form_prompt(settings),'','',token_test=True), token)
+			'dynamic_thresholding_mimic_scale': 10, 'dynamic_thresholding_percentile': 0.999, 'guidance_rescale': 0}
+		GS.MAIN_APP.config_window.process_token_callback(image_gen(GS.MODULE_FACTORY.providers[GS.MAIN_APP.generation_provider_button.text].form_prompt(settings),'','',test=token), token)
 		return
-	prompt=module_factory.providers[GS.MAIN_APP.generation_provider_button.text].form_prompt(settings)
+	prompt=GS.MODULE_FACTORY.providers[GS.MAIN_APP.generation_provider_button.text].form_prompt(settings)
 	filepath=TM.make_file_path(prompt,enumerator,settings["folder_name"],settings["folder_name_extra"])
 	if GS.verbose:
 		GS.last_fully_formed_prompt = prompt
-	return image_gen(GS.AUTH,prompt,filepath,enumerator)
+	return image_gen(prompt,filepath,enumerator)
 
-def decode_sampler_string(string, cluster_string = False):
+def decode_sampler_string(string, provider, cluster_string = False):
 	sampler_settings={}
 	if string.endswith('_dyn'):
 		sampler_settings["smea"] = True
@@ -592,22 +551,26 @@ def decode_sampler_string(string, cluster_string = False):
 		if cluster_string:
 			sd_string = ''
 
-	for noise_schedule in GS.NAI_NOISE_SCHEDULERS:
+	for noise_schedule in provider.CONSTANTS['NOISE_SCHEDULERS']:
 		if sampler_settings["sampler"].endswith('_' + noise_schedule):
 			sampler_settings["sampler"] = sampler_settings["sampler"][:-len(noise_schedule)-1]
 			if noise_schedule == 'default':
-				sampler_settings["noise_schedule"] = GS.NAI_DEFAULT_NOISE_SCHEDULERS[sampler_settings["sampler"]]
+				try:
+					sampler_settings["noise_schedule"] = provider.CONSTANTS['DEFAULT_NOISE_SCHEDULERS'][sampler_settings["sampler"]]
+				except:
+					print('[Warning] Failed to determine default noise schedule, this is a bug that should not happen and may cause generation failures.')
+					sampler_settings["noise_schedule"] = 'native'
 			else:
 				sampler_settings["noise_schedule"] = noise_schedule
 			break
 	if not sampler_settings.get('noise_schedule'):
 		print('[Warning] Failed to determine noise schedule, attempting to fall back to default')
-		sampler_settings["noise_schedule"] = GS.NAI_DEFAULT_NOISE_SCHEDULERS[sampler_settings["sampler"]]
-	
+		sampler_settings["noise_schedule"] = provider.CONSTANTS['DEFAULT_NOISE_SCHEDULERS'][sampler_settings["sampler"]]
+
 	if cluster_string:
-		matching_dict = next((d for d in GS.NAI_SAMPLERS if d['string'].strip(', ') == sampler_settings["sampler"]), None)
-		if matching_dict:
-			sampler_string = matching_dict['name']
+		matching_value = next((value for key, value in provider.CONSTANTS['SAMPLERS'].items() if value.strip(', ') == sampler_settings["sampler"]), None)
+		if matching_value:
+			sampler_string = matching_value
 		else:
 			sampler_string = sampler_settings["sampler"]
 		sampler_settings["sampler_string"] = f'{sampler_string} ({sd_string}{sampler_settings["noise_schedule"].capitalize()})'
@@ -682,7 +645,7 @@ def cluster_collage_processor(settings, cc='', cs_rendered_imgs=1):
 		single_sampler=True
 	final_collages=[]
 	for sampler in settings["sampler"][0]:
-		img_settings.update(decode_sampler_string(sampler, True))
+		img_settings.update(decode_sampler_string(sampler, settings["provider"], True))
 		sampler_collage_blocks=[]
 		for seed_sub_list in settings["seed"]:
 			collage_rows=[]
@@ -799,7 +762,7 @@ def image_sequence_processor(settings):
 		GS.EXECUTOR.submit(make_vid, vid_params, settings["meta"]["vid_folder"], img_results, settings["quantity"])
 
 	for n in range(settings["quantity"]):
-		img_settings.update(decode_sampler_string(settings["sampler"]))
+		img_settings.update(decode_sampler_string(settings["sampler"], settings["provider"]))
 		if GS.cancel_request:
 			return
 		if f_variables_processor(settings, img_settings, {'n':n}) == 'Error':
@@ -927,7 +890,6 @@ def f_variables_processor(settings, img_settings, var_dict):
 	#else: # Without this there might be trouble if settings without specifications for dynamic thresholding are passed
 	#	img_settings["dynamic_thresholding_mimic_scale"] = 10
 	#	img_settings["dynamic_thresholding_percentile"] = 0.999
-	img_settings["negative_prompt_strength"] = float(TM.f_string_processor([str(settings["negative_prompt_strength"])],settings["meta"]["eval_guard"],var_dict))
 	for prompt_type in ["prompt", "negative_prompt"]:
 		if type(settings[prompt_type]) != str:
 			img_settings[prompt_type] = TM.f_string_processor(settings[prompt_type], settings["meta"]["eval_guard"], var_dict)
@@ -1039,39 +1001,4 @@ def wipe_queue(instance=None):
 	GS.MAIN_APP.pause_button.enabled = True
 	print('Task queue wiped')
 
-import importlib
-import inspect
-class ModuleFactory:
-	def __init__(self, provider_folder=GS.FULL_DIR + '/GenerationProviders'):
-		self.provider_folder = provider_folder
-		self.load_providers()
 
-	def load_providers(self):
-		self.providers = {}
-		for filename in os.listdir(self.provider_folder):
-			if filename.endswith(".py"):
-				provider_name = filename[:-3]
-				module_path = os.path.join(self.provider_folder, filename)
-				
-				spec = importlib.util.spec_from_file_location(provider_name, module_path)
-				module = importlib.util.module_from_spec(spec)
-				spec.loader.exec_module(module)
-				
-				# Look for a class that ends with 'Provider' in the module
-				provider_class = None
-				for name, obj in inspect.getmembers(module):
-					if inspect.isclass(obj) and name.endswith('Provider'):
-						provider_class = obj
-						break
-				
-				if provider_class:
-					self.providers[provider_name] = provider_class()
-				else:
-					print(f"Warning: No Provider class found in {filename}")
-
-	def get_provider(self, name):
-		return self.providers.get(name)
-
-	def list_providers(self):
-		return list(self.providers.keys())
-module_factory = ModuleFactory()
