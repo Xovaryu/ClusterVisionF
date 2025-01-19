@@ -63,6 +63,7 @@ import time
 import re
 import traceback
 import copy
+import os
 import io
 from PIL import Image as PILImage
 import kivy
@@ -97,13 +98,7 @@ font_large=19
 font_small=15
 
 class ClusterVisionF(App):
-	# 01. Functions needed for the steps slider
-	@handle_exceptions
-	def on_steps_value_change_min(self, instance, value):
-		self.steps_counter_min.text = str(int(value))
-	@handle_exceptions
-	def on_steps_value_change_max(self, instance, value):
-		self.steps_counter_max.text = str(int(value))
+	# 01. Function needed for the steps slider
 	@handle_exceptions
 	def format_sampler_text(self, current_text):
 		current_text = current_text.rstrip()
@@ -135,14 +130,12 @@ class ClusterVisionF(App):
 		self.theme_window = KW.ThemeWindow(title='Configure Theme')
 		self.file_handling_window = KW.FileHandlingWindow(title='File Handling (the f-strings here determine how the folder structure for created files look)')
 		self.drop_overlay = KW.DropOverlay() # This overlay uses the size_hints of the main layouts, so they need to be initialized first
-		
-		layout = BoxLayout(orientation='vertical', spacing=10, padding=10)
 
 		# Mode Switcher and config window buttons
 		mode_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
 		mode_label = Label(text='Mode:', **GS.l_row_size)
-		settings_button = Button(text='⚙️', font_size=font_large, font_name = 'NotoEmoji', on_release=self.config_window.open, **GS.imp_row_size)
-		theme_button = Button(text='🎨', font_size=font_large, font_name = 'NotoEmoji', on_release=self.theme_window.open, **GS.imp_row_size)
+		settings_button = Button(text='⚙️', font_size=font_large, font_name = 'NotoEmoji', on_release=self.config_window.open, **GS.imp_row_size, tooltip_types=['Settings'])
+		theme_button = Button(text='🎨', font_size=font_large, font_name = 'NotoEmoji', on_release=self.theme_window.open, **GS.imp_row_size, tooltip_types=['Themes'])
 		file_handling_button = Button(text='📁', font_size=font_large, font_name = 'NotoEmoji', on_release=self.file_handling_window.open, **GS.imp_row_size)
 		drop_overlay_button = Button(text='Help', font_size=font_large, size_hint = (None, None), on_release=self.drop_overlay.open, size = (65, GS.UI_field_height))
 		self.mode_switcher = KW.ModeSwitcher(app=self, size_hint=(1, None), size=(100, GS.UI_field_height))
@@ -162,7 +155,7 @@ class ClusterVisionF(App):
 		generation_provider_label = Label(text='Gen. Provider:', **GS.l_row_size)
 		self.generation_provider_import = KW.ImportButton(**GS.imp_row_size)
 		self.generation_provider_dropdown = DropDown()
-		self.generation_provider_button = KW.ScrollDropDownButton(self.generation_provider_dropdown, text='NO GENERATION PROVIDER INITIALIZED', size_hint=(1, None),
+		self.generation_provider_button = KW.ScrollDropDownButton(self.generation_provider_dropdown, text='NO GENERATION PROVIDER INITIALIZED', size_hint=(1, None), tooltip_types=['Generation Provider'],
 			size=(100, GS.UI_field_height), set_state_func = (handle_exceptions(lambda index: [
 				setattr(self.generation_provider_button, 'text', self.generation_provider_button.children[index].text),
 				GS.MODULE_FACTORY.providers[self.generation_provider_button.children[index].text].switch_to()
@@ -189,7 +182,7 @@ class ClusterVisionF(App):
 		
 		self.model_dropdown = DropDown()
 		self.model_dropdown.bind(on_select=handle_exceptions(lambda instance, btn: setattr(GS.MAIN_APP.model_button, 'text', btn.text)))
-		self.model_button = KW.ScrollDropDownButton(self.model_dropdown, text='NO MODEL INITIALIZED', size_hint=(1, None), size=(100, GS.UI_field_height))
+		self.model_button = KW.ScrollDropDownButton(self.model_dropdown, text='NO MODEL INITIALIZED', size_hint=(1, None), size=(100, GS.UI_field_height), tooltip_types=['Model'])
 
 		model_row.add_widget(self.model_label)
 		model_row.add_widget(self.model_import)
@@ -200,7 +193,7 @@ class ClusterVisionF(App):
 		name_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
 		name_label = Label(text='Name:', **GS.l_row_size)
 		self.name_import = KW.ImportButton(**GS.imp_row_size)
-		self.name_input = KW.ScrollInput(min_value=-100000, max_value=100000, fi_mode='hybrid_int', increment=1, multiline=False, size_hint=(1, None), size=(100, GS.UI_field_height))
+		self.name_input = KW.ScrollInput(min_value=-100000, max_value=100000, fi_mode='hybrid_int', increment=1, multiline=False, size_hint=(1, None), size=(100, GS.UI_field_height), tooltip_types=['Name'])
 	
 		name_row.add_widget(name_label)
 		name_row.add_widget(self.name_import)
@@ -211,11 +204,20 @@ class ClusterVisionF(App):
 		folder_name_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
 		folder_name_label = Label(text='Folder Name:', **GS.l_row_size)
 		self.folder_name_import = KW.ImportButton(**GS.imp_row_size)
-		self.folder_name_input = KW.ScrollInput(min_value=-100000, max_value=100000, fi_mode='hybrid_int', increment=1, multiline=False, allow_empty=True, size_hint=(1, None), size=(100, GS.UI_field_height))
+		folder_name_layout = BoxLayout(orientation='horizontal')
+		self.folder_name_input = KW.ScrollInput(min_value=-100000, max_value=100000, fi_mode='hybrid_int', increment=1, multiline=False, allow_empty=True, size_hint=(1, None), size=(100, GS.UI_field_height),
+			tooltip_types=['Folder Name'])
+		open_folder_button = Button(text='📁', font_size=19,
+			on_release=handle_exceptions(lambda btn: [
+				os.makedirs(f'{GS.FULL_DIR}/__0utput__/{self.folder_name_input.text}', exist_ok=True),
+				os.startfile(f'{GS.FULL_DIR}/__0utput__/{self.folder_name_input.text}/')]),
+			font_name = 'NotoEmoji', size_hint = (None, None), size = (GS.UI_field_height, GS.UI_field_height), tooltip_types=['Open Generation Folder'])
+		folder_name_layout.add_widget(open_folder_button)
+		folder_name_layout.add_widget(self.folder_name_input)
 
 		folder_name_row.add_widget(folder_name_label)
 		folder_name_row.add_widget(self.folder_name_import)
-		folder_name_row.add_widget(self.folder_name_input)
+		folder_name_row.add_widget(folder_name_layout)
 		self.input_layout.add_widget(folder_name_row)
 
 		# Seed - Cluster Collage
@@ -291,29 +293,12 @@ class ClusterVisionF(App):
 		steps_label = Label(text='Steps:', **GS.l_row_size)
 		self.steps_import = KW.ImportButton(**GS.imp_row_size)
 		steps_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, GS.UI_field_height))
-		self.steps_slider_min = Slider(min=1, max=100, value=28, step=1)
-		self.steps_counter_min = Label(text=str(28), size_hint=(None, None), size=(50, GS.UI_field_height))
-		self.steps_slider_max = Slider(min=1, max=100, value=28, step=1)
-		self.steps_counter_max = Label(text=str(28), size_hint=(None, None), size=(50, GS.UI_field_height))
-		self.steps_slider_min.bind(value=self.on_steps_value_change_min)
-		self.steps_slider_max.bind(value=self.on_steps_value_change_max)
-		steps_layout.add_widget(self.steps_slider_min)
-		steps_layout.add_widget(self.steps_counter_min)
-		steps_layout.add_widget(self.steps_slider_max)
-		steps_layout.add_widget(self.steps_counter_max)
-		# Create the f-string variant
-		steps_super_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, GS.UI_field_height))
-		steps_super_layout.add_widget(steps_layout)# This layout needs to be added first because the StateFButton immediately hides it and that requires a parent
-		self.steps_input_f = KW.FScrollInput(min_value=1, max_value=50, fi_mode='hybrid_int', increment=1, text='28', multiline=False, size_hint=(1, None), size=(100, GS.UI_field_height), font_size=font_small,font_name='Unifont', tooltip_types=['Steps'])
-		self.steps_f = KW.StateFButton(self.mode_switcher, steps_layout, self.steps_input_f, None, [steps_layout], [self.steps_input_f], size_hint=(None, None), size=(GS.UI_field_height, GS.UI_field_height))
-		steps_super_layout.add_widget(self.steps_f)
-		steps_super_layout.remove_widget(steps_layout) # We also need remove and re-add this layout to position it correctly
-		steps_super_layout.add_widget(steps_layout)
-		steps_super_layout.add_widget(self.steps_input_f)
+		self.steps_input = KW.FScrollInput(min_value=1, max_value=50, fi_mode='hybrid_int', increment=1, text='28', multiline=False, size_hint=(1, None), size=(100, GS.UI_field_height), font_size=font_small,font_name='Unifont', tooltip_types=['Steps'])
+		steps_layout.add_widget(self.steps_input)
 
 		steps_row.add_widget(steps_label)
 		steps_row.add_widget(self.steps_import)
-		steps_row.add_widget(steps_super_layout)
+		steps_row.add_widget(steps_layout)
 		self.input_layout.add_widget(steps_row)
 
 		# Guidance
@@ -321,32 +306,17 @@ class ClusterVisionF(App):
 		guidance_label = Label(text='Guidance:', **GS.l_row_size)
 		self.guidance_import = KW.ImportButton(**GS.imp_row_size)
 		guidance_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, GS.UI_field_height))
-		#The API actually accepts much, much higher guidance values, though there really seems no point in going higher than 100 at all
-		self.guidance_input_min = KW.ScrollInput(min_value=-1000, max_value=1000, fi_mode=float, increment=0.1, text='10', multiline=False, size_hint=(1, None), size=(100, GS.UI_field_height), font_size=font_small, tooltip_types=['CFG Scale/Scale/Guidance'])
-		self.guidance_input_max = KW.ScrollInput(min_value=-1000, max_value=1000, fi_mode=float, increment=0.1, text='10', multiline=False, size_hint=(1, None), size=(100, GS.UI_field_height), font_size=font_small, tooltip_types=['CFG Scale/Scale/Guidance'])
-		guidance_layout.add_widget(self.guidance_input_min)
-		guidance_layout.add_widget(self.guidance_input_max)
-		# Create the f-string variant
-		self.guidance_input_f = KW.FScrollInput(min_value=-1000, max_value=1000, fi_mode='hybrid_float', increment=0.1, text='5', multiline=False, size_hint=(1, None), size=(100, GS.UI_field_height), font_size=font_small,font_name='Unifont', tooltip_types=['CFG Scale/Scale/Guidance'])
+		self.guidance_input = KW.FScrollInput(min_value=-1000, max_value=1000, fi_mode='hybrid_float', increment=0.1, text='5', multiline=False, size_hint=(1, None), size=(100, GS.UI_field_height), font_size=font_small,font_name='Unifont', tooltip_types=['CFG Scale/Scale/Guidance'])
 		guidance_rescale_label = Label(text='G. Rescale:', **GS.l_row_size)
 		self.guidance_rescale_input_f = KW.FScrollInput(min_value=-1000, max_value=1000, fi_mode='hybrid_float', increment=0.1, text='0', multiline=False, size_hint=(1, None), size=(100, GS.UI_field_height), font_size=font_small,font_name='Unifont')
-		guidance_layout_f = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, GS.UI_field_height))
 		
-		guidance_layout_f.add_widget(self.guidance_input_f)
-		guidance_layout_f.add_widget(guidance_rescale_label)
-		guidance_layout_f.add_widget(self.guidance_rescale_input_f)
-		guidance_super_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), size=(400, GS.UI_field_height))
-		guidance_super_layout.add_widget(guidance_layout) # This layout needs to be added first because the StateFButton immediately hides it and that requires a parent
-		self.guidance_f = KW.StateFButton(self.mode_switcher, guidance_layout, guidance_layout_f, None, [guidance_layout], [self.guidance_input_f], size_hint=(None, None), size=(GS.UI_field_height, GS.UI_field_height))
-
-		guidance_super_layout.add_widget(self.guidance_f)
-		guidance_super_layout.remove_widget(guidance_layout) # We also need to remove and re-add this layout to position it correctly
-		guidance_super_layout.add_widget(guidance_layout)
-		guidance_super_layout.add_widget(guidance_layout_f)
+		guidance_layout.add_widget(self.guidance_input)
+		guidance_layout.add_widget(guidance_rescale_label)
+		guidance_layout.add_widget(self.guidance_rescale_input_f)
 		
 		guidance_row.add_widget(guidance_label)
 		guidance_row.add_widget(self.guidance_import)
-		guidance_row.add_widget(guidance_super_layout)
+		guidance_row.add_widget(guidance_layout)
 		self.input_layout.add_widget(guidance_row)
 
 		# Sampler
@@ -354,12 +324,12 @@ class ClusterVisionF(App):
 		sampler_label = Label(text='Sampler:', **GS.l_row_size)
 		self.sampler_import = KW.ImportButton(**GS.imp_row_size)
 
-		self.sampler_input = TextInput(multiline=True, size_hint=(1, 1), height=GS.UI_field_height*2)
-		add_sampler_button = Button(text='<', size_hint=(None, 1), width=GS.UI_field_height)
+		self.sampler_input = TextInput(multiline=True, size_hint=(1, 1), height=GS.UI_field_height*2, tooltip_types=['Sampler'])
+		add_sampler_button = Button(text='<', size_hint=(None, 1), width=GS.UI_field_height, tooltip_types=['Add Sampler String From Scroll Dropdowns'])
 		add_sampler_button.bind(on_release=handle_exceptions(
 			lambda btn: setattr(self.sampler_input, 'text', self.format_sampler_text(self.sampler_input.text))
 		))
-		sampler_clear_button = Button(text='Clear', size_hint=(None, 1), size=(60, GS.UI_field_height))
+		sampler_clear_button = Button(text='Clear', size_hint=(None, 1), size=(60, GS.UI_field_height), tooltip_types=['Clear Sampler String'])
 		sampler_clear_button.bind(on_release=handle_exceptions(lambda btn: setattr(self.sampler_input, 'text', '')))
 
 		self.sampler_injector_dropdown = KW.PermissiveDropDown(auto_width=False,size_hint=(1, None))
@@ -369,7 +339,7 @@ class ClusterVisionF(App):
 				for child in children if hasattr(child, 'mod_values')
 			]
 		)
-		self.sampler_injector_button = Button(text='+', size_hint=(None, 1), width=GS.UI_field_height, height=GS.UI_field_height)
+		self.sampler_injector_button = Button(text='+', size_hint=(None, 1), width=GS.UI_field_height, height=GS.UI_field_height, tooltip_types=['Open Sampler Injector Dropdown'])
 		self.sampler_injector_button.bind(
 		on_release=handle_exceptions(lambda *args: [_move_noise_button(self, self.sampler_injector_dropdown),
 		self.sampler_injector_dropdown.open(self.sampler_injector_button)])
@@ -378,7 +348,7 @@ class ClusterVisionF(App):
 		self.sampler_dropdown = DropDown()
 		self.sampler_dropdown.bind(on_select=handle_exceptions(lambda instance, btn: setattr(self.sampler_button, 'text', btn.text)))
 		self.sampler_dropdown.bind(on_select=handle_exceptions(lambda instance, btn: setattr(self.sampler_button, 'gen_value', btn.gen_value)))
-		self.sampler_button = KW.ScrollDropDownButton(self.sampler_dropdown, text='NOT INITIALIZED', size_hint=(1, None), size=(100, GS.UI_field_height),
+		self.sampler_button = KW.ScrollDropDownButton(self.sampler_dropdown, text='NOT INITIALIZED', size_hint=(1, None), size=(100, GS.UI_field_height), tooltip_types=['Sampler'],
 			set_state_func = (lambda index: [
 				setattr(self.sampler_button, 'text', self.sampler_button.children[index].text),
 				setattr(self.sampler_button, 'gen_value', self.sampler_button.children[index].gen_value)
@@ -387,7 +357,7 @@ class ClusterVisionF(App):
 
 		self.sampler_cutoff = KW.ScrollInput(text='0', min_value=0, size_hint=(None, None), width=28, height=GS.UI_field_height, tooltip_types=['Sampler Cutoff'])
 		self.noise_schedule_dropdown = DropDown()
-		self.noise_schedule_button = KW.ScrollDropDownButton(self.noise_schedule_dropdown, text='default', size_hint=(1, None), size=(100, GS.UI_field_height))
+		self.noise_schedule_button = KW.ScrollDropDownButton(self.noise_schedule_dropdown, text='default', size_hint=(1, None), size=(100, GS.UI_field_height), tooltip_types=['Noise Schedule'])
 		self.noise_schedule_dropdown.bind(on_select=handle_exceptions(lambda instance, btn: setattr(self.noise_schedule_button, 'text', btn.text)))
 
 		self.sampler_injector_dropdown.bind(on_dismiss=handle_exceptions(lambda *args: _move_noise_button(self, sampler_sublayout_bottom)))
@@ -498,15 +468,17 @@ class ClusterVisionF(App):
 		uc_row.add_widget(uc_layout)
 		self.input_layout.add_widget(uc_row)
 
-		# Decrisper
+		# Decrisper/Dynamic Thresholding
 		decrisp_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
 		decrisp_label = Label(text='Dyn. Thresh.:', **GS.l_row_size)
 		self.decrisp_import = KW.ImportButton(**GS.imp_row_size)
-		self.decrisp_button = KW.StateShiftButton(text='Decrisper', size_hint=(None, None), size=(90,GS.UI_field_height))
+		self.decrisp_button = KW.StateShiftButton(text='Decrisper', size_hint=(None, None), size=(90,GS.UI_field_height), tooltip_types=['Decrisper/Dynamic Thresholding'])
 		decrisp_scale = Label(text='Mimic Scale:', size_hint=(None, None), size=(100, GS.UI_field_height))
-		self.decrisp_guidance_input = KW.FScrollInput(min_value=-10000, max_value=10000, fi_mode='hybrid_float', increment=0.1, text='10', multiline=False, size_hint=(1, None), size=(100, GS.UI_field_height), font_size=font_small,font_name='Unifont')
+		self.decrisp_guidance_input = KW.FScrollInput(min_value=-10000, max_value=10000, fi_mode='hybrid_float', increment=0.1, text='10', multiline=False, size_hint=(1, None), size=(100, GS.UI_field_height),
+		tooltip_types=['Decrisper/Dynamic Thresholding'], font_size=font_small,font_name='Unifont')
 		decrisp_percentile = Label(text='Percentile:', size_hint=(None, None), size=(90, GS.UI_field_height))
-		self.decrisp_percentile_input = KW.FScrollInput(min_value=0.000001, max_value=1, fi_mode='hybrid_float', increment=0.001, text='0.999', multiline=False, size_hint=(1, None), size=(100, GS.UI_field_height), round_value=6, font_size=font_small,font_name='Unifont')
+		self.decrisp_percentile_input = KW.FScrollInput(min_value=0.000001, max_value=1, fi_mode='hybrid_float', increment=0.001, text='0.999', multiline=False, size_hint=(1, None), size=(100, GS.UI_field_height),
+		tooltip_types=['Decrisper/Dynamic Thresholding'], round_value=6, font_size=font_small,font_name='Unifont')
 		decrisp_layout = BoxLayout(orientation='horizontal',size_hint=(1, None), height=GS.UI_field_height)
 		decrisp_layout.add_widget(self.decrisp_button)
 		decrisp_layout.add_widget(decrisp_scale)
@@ -538,7 +510,7 @@ class ClusterVisionF(App):
 		action_buttons_row.add_widget(action_buttons_layout)
 		self.input_layout.add_widget(action_buttons_row)
 
-		# In the middle is the self.meta_layout with the console and some more relevant buttons
+		# In the middle is the self.meta_layout with the console, task tracker and some more relevant buttons
 		task_state_layout = BoxLayout(orientation='vertical', size_hint=(1, None), height=GS.UI_field_height*5)
 		
 		self.import_buttons = [self.generation_provider_import, self.name_import, self.folder_name_import, self.model_import, self.cc_seed_import, self.is_seed_import,
@@ -580,7 +552,7 @@ class ClusterVisionF(App):
 
 		wait_time_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=GS.UI_field_height)
 		wait_time_label = Label(text='Wait time:', halign = 'left', **GS.l_row_size, size_hint_x=None)
-		self.wait_time_input = KW.ScrollInput(text='1', fi_mode=float, min_value=0, size_hint=(1, None), width=60, height=GS.UI_field_height)
+		self.wait_time_input = KW.ScrollInput(text='1', fi_mode=float, min_value=0, size_hint=(1, None), width=60, height=GS.UI_field_height, tooltip_types=['Wait Time'])
 		wait_time_layout.add_widget(wait_time_label)
 		wait_time_layout.add_widget(self.wait_time_input)
 		
@@ -647,7 +619,7 @@ class ClusterVisionF(App):
 		self.image_organization_layout.add_widget(image_lists_layout)
 
 		# The super_layout is the highest layout in the hierarchy and is also the one that is returned for Kivy to display
-		# It has the user interaction section left, the console/metadata section in the middle, and the image organization on the right		
+		# It has the user interaction section left, the console/task data section in the middle, and the image organization on the right		
 		self.super_layout = BoxLayout(orientation='horizontal')
 		self.super_layout.add_widget(self.input_layout)
 		self.super_layout.add_widget(self.meta_layout)
@@ -707,12 +679,12 @@ class ClusterVisionF(App):
 			'folder_name': self.folder_name_input.text,
 			'folder_name_extra': '',
 			'provider': GS.MODULE_FACTORY.selected_provider,
-			'model': self.model_button.gen_value,
+			'model': self.model_button.text,
 			'seed': int(seed),
 			'sampler': self.get_sampler_setting(),
-			'scale': self.guidance_input_f.text if self.guidance_f.enabled else float(self.guidance_input_min.text),
+			'scale': self.guidance_input.text,
 			'guidance_rescale': self.guidance_rescale_input_f.text,
-			'steps': self.steps_input_f.text if self.steps_f.enabled else int(self.steps_slider_min.value),
+			'steps': self.steps_input.text,
 			'img_mode': {'width': int(self.resolution_selector.resolution_width.text),
 								'height': int(self.resolution_selector.resolution_height.text)},
 			'prompt': self.prompt.input.text,

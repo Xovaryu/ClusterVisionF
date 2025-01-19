@@ -318,6 +318,7 @@ def save_settings(folder_name,settings,sub_folder=''):
 	with open(f'__0utput__/{replace_forbidden_symbols(folder_name)}{sub_folder}/settings꞉{replace_forbidden_symbols(settings["name"])}.py','w',encoding="utf_16") as file:
 		file.write('settings={\n')
 		for key, value in settings.items():
+			#The meta subdict is specifically for things we only need at runtime, so we need to skip it here, and image generations get saved separately
 			if key == 'meta' or key == 'image_entries':
 				continue
 			if key == 'provider':
@@ -327,11 +328,11 @@ def save_settings(folder_name,settings,sub_folder=''):
 				file.write(f"{repr(key)}: [")
 				for item in value:
 					# Make sure that f-strings get saved correctly
-					if key == 'prompt' or key == 'negative_prompt':
-						for elem in item:
-							file.write(f"""\n{escape_quotes_for_saving(str('[{}]'.format("'''" + elem + "'''")))},""")
+					#if key == 'prompt' or key == 'negative_prompt':
+					#	for elem in item:
+					#		file.write(f"""\n{escape_quotes_for_saving(str('[{}]'.format("'''" + elem + "'''")))},""")
 					# Make sure that seed lists get saved correctly
-					elif key == 'seed':
+					if key == 'seed':
 						file.write(f"\n[{', '.join(repr(elem) for elem in item)}],")
 				file.write(f"],\n")
 			else:

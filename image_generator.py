@@ -67,15 +67,14 @@ from collections import deque
 
 from kivy.clock import Clock
 
-from pympler.tracker import SummaryTracker
-GS.tracker = SummaryTracker()
+#from pympler.tracker import SummaryTracker
+#GS.tracker = SummaryTracker()
 
 # ---Primary Functions---
 
 
 
 # 2. The primary function to generate images. Sends the request and will persist until it is fulfilled, then saves the image, and returns the path
-# Currently NAI specific
 @handle_exceptions
 def image_gen(prompt,filepath,enumerator,test=False):
 	skipped = False
@@ -342,6 +341,7 @@ def attach_metadata_header(img_collages,settings,name_extra, cc=''):
 	# Steps, using the FFW to linebreak at |
 	available_lines = starting_amount_lines - currently_used_lines
 	steps = settings["steps"]
+	### These blocks should become deprecated if support for the old sliders/dual fields is completely dropped in favor of f-strings
 	if (isinstance(steps, str) and "⁅" in steps) or type(steps) != list:
 		steps_string = 'Steps: ' + str(steps)
 	elif len(settings["meta"]["steps"]) > 1:
@@ -365,10 +365,8 @@ def attach_metadata_header(img_collages,settings,name_extra, cc=''):
 		line_height*currently_used_lines, left_meta_block, available_lines, line_height, (255,255,255,0), break_symbol = '|')
 	currently_used_lines=currently_used_lines+used_lines_scale
 
-	# The sampler string has been migrated to the same place the seed is on, the individual clusters
-
 	# Decrisper
-	decrisper_string = 'Decrisper: '
+	decrisper_string = 'Dynamic Thresholding: '
 	if settings["dynamic_thresholding"] == False:
 		decrisper_string += 'Off'
 	else:
@@ -379,15 +377,13 @@ def attach_metadata_header(img_collages,settings,name_extra, cc=''):
 	currently_used_lines=currently_used_lines+used_lines_decrisper
 
 	#Draw the prompt and UC on the right side
-	full_prompt=settings["prompt"]
-	draw, img_header, used_lines_prompt, _=TM.fallback_font_writer(draw, img_header, full_prompt, left_meta_block, line_height*0, img_collages.size[0]-left_meta_block,
+	draw, img_header, used_lines_prompt, _=TM.fallback_font_writer(draw, img_header, settings["prompt"], left_meta_block, line_height*0, img_collages.size[0]-left_meta_block,
 		currently_used_lines, line_height, (180,255,180,0), explicit_space = True)
 	currently_used_lines=max(currently_used_lines,used_lines_prompt)
 	available_lines = currently_used_lines-used_lines_prompt
 
-	full_UC=settings["negative_prompt"]
 	time.sleep(10)
-	draw, img_header, used_lines_uc, _=TM.fallback_font_writer(draw, img_header, full_UC, left_meta_block, line_height*(used_lines_prompt),
+	draw, img_header, used_lines_uc, _=TM.fallback_font_writer(draw, img_header, settings["negative_prompt"], left_meta_block, line_height*(used_lines_prompt),
 		img_collages.size[0]-left_meta_block, available_lines, line_height, (255,180,180,0), explicit_space = True)
 
 	# Process entries into subimages

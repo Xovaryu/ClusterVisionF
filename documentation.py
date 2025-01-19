@@ -14,7 +14,7 @@ By default the following variables will be usable: n for number, c for column, r
 n is available in all modes, when making image sequences this is simply the number of the image/frame, in cluster collages/sequences n is the number of the image within its cluster going left to right, top to bottom
 c is available in both cluster modes, and enumerates images according to the column they are in, or going along the x-axis, to the right
 r is available in both cluster modes, and enumerates images according to the row they are in, or going along the y-axis, downwards
-s is available in both cluster modes, and enumerates the seed clusters, in case you want to each seed cluster evaluated differently
+s is available in both cluster modes, and enumerates the seed clusters, in case you want each seed cluster evaluated differently
 cc is exclusive to cluster sequences and is the number of each individual cluster collage, which means that for cluster sequences cc acts like n does for image sequences
 By default strings are evaluated without __builtins__ for your safety, this means that pretty much only the most basic expressions will work such as addition or multiplication, and only extreme malicious code should be able to run.
 You can enable __builtins__ per session in the settings if you really need to. Also you always have modules math and numpy (as np) available, so you could write something like "⁅np.exp(1)⁆". See: [u][ref=https://numpy.org/doc/stable/reference]Numpy Reference[/ref][/u]
@@ -58,8 +58,8 @@ When using img2img at very low strengths you also may be able and might even wan
 """This tiny field determines the cutoff numbers for samplers on a cluster collage, that is how many samplers are displayed per row. 0 is for all, so a complete horizontal display, 1 would be all aligned vertically.
 Be advised that you should pay attention to make your number of samplers cleanly divisible by the sampler cutoff, or you may run into issues with collage generation.""",
 	'Seed':
-"""This field used for the/a seed when generating. The seed is basically a predetermined random noise pattern from which the image is diffused. An empty field means that a new seed will be set per image or task. Collages of course maintain picked seeds per cluster.
-When your settings are otherwise good enough but the results are not satisfying, typically you would try again on new seeds. When making collages in particular it can be helpful to search for specific seeds to show special things, though be aware and honest about biases.
+"""This field is used for the/a seed when generating. The seed is basically a predetermined random noise pattern from which the image is diffused. An empty field means that a new seed will be set per image or task. Collages of course maintain picked seeds per cluster.
+If your settings are otherwise good enough but the results are not satisfying, typically you would try again on new seeds. When making collages in particular it can be helpful to search for specific seeds to show special things, though be aware and honest about biases and cherrypicking.
 When making cluster collages seeds provide the variable s in case you want to address them individually.
 Seed fields like these additionally support 4 quick operations via simple single button hotkeys:
 R: Set a new random but fixed seed to the field
@@ -67,8 +67,8 @@ C: Clear the field for unfixed randomization again
 L: Set the seed of the last image that has been generated, particularly useful if you use single generations in search of useful seeds for collages or sequences
 P: Set the seed of the image before the last one that has been generated""",
 	'History':
-"""These are the images that you have generated in this session so far. In order to not litter your memory older generations are eventually deleted from the history, but not from your system.
-You can transfer images into the loaded list where they will persist until deletion or closing the program.""",
+"""These are the images that you have generated in this session so far. In order to not litter your memory, older generations are eventually deleted from the history, but not from your system.
+You can transfer images into the loaded list where they will persist until manual deletion or closing the program.""",
 	'Show Last Generation':
 """A simple boolean button that switches whether any new generations should be automatically displayed or not.""",
 	'Loaded images':
@@ -126,7 +126,7 @@ For cluster sequences this value instead determines the range of cc, and these n
 """CVFs main way of producing high quality insightful data are these cluster collages. Their name comes from them being collages in which you can organize nigh arbitrary clusters of images. Provides variables n, c, r and s.
 Check the tooltip of any F-Input for more details on the variables.""",
 	'Image Sequence':
-"""Produces only simple images, but can do so in a sequence, which also can be turned into a video. Provides the variable n to use in F-strings.
+"""Produces only simple images, but will do so in a sequence, which also can be turned into a video. Provides the variable n to use in F-strings.
 Check the tooltip of any F-Input for more details on the variables.""",
 	'Cluster Sequence':
 """See "Cluster Collage" and "Image Sequence" first. A cluster sequence is just the logical combination of both concepts, potentially allowing you to process hundreds of images into one single insightful video.
@@ -138,7 +138,48 @@ Check the tooltip of any F-Input for more details on the variables.""",
 """These buttons determine what happens when a single image is dropped into the left of the UI to lead metadata, their associated fields only change when the button is active.""",
 	'Token Cost Bar':
 """This bar shows how much of the available tokens for generation are being taken up by the current prompt. If the color turns purple that means that the prompt contains evaluated elements which are not counted and predicted.""",
-}# Left to implement: Settings, Themes, Sampler, Decrisper (partially deprecated in NAID tho), Model, Name, Folder Name, Wait Time
+	'Settings':
+"""This button opens a window to configure various CVF settings.""",
+	'Themes':
+"""CVF supports custom color themes that can be loaded and created here. Theme files can also be dropped into the program to load them.
+This button opens a window in which you can change the colors of different elements, apply that theme, save that theme, load a theme from the themes folder or open a file explorer window of that folder.""",
+	'Sampler':
+"""Models such as (but not only) Stable Diffusion create images starting with noise. At each step the model estimates the noise of the image, and then subtracts it in multiple steps.
+Thus from a starting image of pure noise you can get a cat (girl(/guy)). How this denoising is done is up to the sampler.
+If the sampler string is empty, then the scroll buttons on the right determine which sampler will be used to generate. When making image sequences or single generations and there is a string, the first entry is used.
+When there is a string with multiple samplers and cluster collages are created, then all the according settings get repeated for each sampler. Check the other tooltips for further information.""",
+	'Clear Sampler String':
+"""This button just empties the sampler string textbox, returning control to the scrolling dropdowns on the right, and if desired allowing to start a new sampler string from scratch.""",
+	'Noise Schedule':
+"""Each step only subtracts a certain amount of estimated noise, starting with 100% estimated noise before the first step, and 0% after the last one.
+The noise schedule is the curve according to which noise is subtracted at each step Usually the first steps subtract a lot more noise than later ones.""",
+	'Add Sampler String From Scroll Dropdowns':
+"""This adds a sampler to the text field according to what sampler/noise schedule combination the scrolling dropdowns on the right currently display.""",
+	'Open Sampler Injector Dropdown':
+"""This opens an injector dropdown that allows you to copy, append or prepend samplers to your string.""",
+	'Decrisper/Dynamic Thresholding':
+"""This is used mainly to address color issues with higher guidance/scale values, though it isn't to say it is a trivial effect on color, as most things generative AI, it's not that simple.
+The technical explanation is that "latents are clamped between steps", mimic scale is which guidance/scale it attempts to mimic, and percentile is how hard it clamps.
+This means there is a singularity at MS 0 and percentile 100%.
+NAID's so called decrisper, really is just dynamic thresholding at mimic scale 10 and 99%.
+NAID used to allow usage of all values, but currently mimic scale and percentile need to be passed, but will be ignored.""",
+	'Generation Provider':
+"""The provider is the overarching architecture you are using to generate, such as NAI's online API and local SD.""",
+	'Model':
+"""This is the model that you'll be using from the selected provider.""",
+	'Name':
+"""This will be the base name of your output(s). When making multiple images they will be enumerated accordingly.""",
+	'Folder Name':
+"""This is the folder to which the images will be saved and loaded from. If the folder doesn't exist it will be created.""",
+	'Open Generation Folder':
+"""Opens the folder into which generations currently would be saved. This will create that folder if it doesn't yet exist.""",
+	'Wait Time':
+"""This is the time that CVF waits between each generation. This so you can treat online APIs with the respect their terms may demand, and so you can lessen strain on your GPU.""",
+	'Seed Rows':
+"""This number determines the number of seed rows the final cluster collage(s) get(s). The seed grid provides a live representation of the final grid structure and ability to control each seed.""",
+	'Seed Columns':
+"""This number determines the number of seed columns the final cluster collage(s) get(s). The seed grid provides a live representation of the final grid structure and ability to control each seed.""",
+}# Left to implement: SMEA, Guidance Rescale, Prompt/UC Injector buttons
 # API token stuff and in general the stuff in the settings window, further seed grid descriptions
 HELP_TEXT = """ClusterVisionF is a bit of a complicated and unusual UI, but most text fields and buttons have tooltips attached that will explain their function and possible hotkeys.
 Rightclick any such elements to see if they have something to say about themselves.

@@ -274,30 +274,10 @@ def load_settings_from_py(file_path):
 				GS.MAIN_APP.model_button.text=GS.MODULE_FACTORY.selected_provider.CONSTANTS['MODELS'][settings["model"]]
 			except:
 				print(f'[Warning] Failed to set model, the setting may be invalid')
-			if GS.MAIN_APP.steps_import.enabled: 
-				if type(settings["steps"]) == str:
-					GS.MAIN_APP.steps_f.enabled = True
-					try_to_load('steps', GS.MAIN_APP.steps_input_f, settings, 'steps', True, 'text')
-				elif type(settings["steps"]) == list:
-					GS.MAIN_APP.steps_f.enabled = False
-					try_to_load('steps', GS.MAIN_APP.steps_slider_min, settings, ['steps', 0], True, 'value')
-					try_to_load('steps', GS.MAIN_APP.steps_slider_max, settings, ['steps', 1], True, 'value')
-				else:
-					GS.MAIN_APP.steps_f.enabled = False
-					try_to_load('steps', GS.MAIN_APP.steps_slider_min, settings, 'steps', True, 'value')
-					try_to_load('steps', GS.MAIN_APP.steps_slider_max, settings, 'steps', True, 'value')
+			if GS.MAIN_APP.steps_import.enabled:
+				try_to_load('steps', GS.MAIN_APP.steps_input, settings, 'steps', True, 'text')
 			if GS.MAIN_APP.guidance_import.enabled:
-				if type(settings["scale"]) == str:
-					GS.MAIN_APP.guidance_f.enabled = True
-					try_to_load('scale', GS.MAIN_APP.guidance_input_f, settings, 'scale', True, 'text')
-				elif type(settings["scale"]) == list:
-					GS.MAIN_APP.guidance_f.enabled = False
-					try_to_load('scale', GS.MAIN_APP.guidance_input_min, settings, ['scale', 0], True, 'text')
-					try_to_load('scale', GS.MAIN_APP.guidance_input_max, settings, ['scale', 1], True, 'text')
-				else:
-					GS.MAIN_APP.guidance_f.enabled = False
-					try_to_load('scale', GS.MAIN_APP.guidance_input_min, settings, 'scale', True, 'text')
-					try_to_load('scale', GS.MAIN_APP.guidance_input_max, settings, 'scale', True, 'text')
+				try_to_load('scale', GS.MAIN_APP.guidance_input, settings, 'scale', True, 'text')
 				try_to_load('guidance_rescale', GS.MAIN_APP.guidance_rescale_input_f, settings, 'guidance_rescale', True, 'text', 0)
 			try_to_load('dynamic_thresholding', GS.MAIN_APP.decrisp_button, settings, 'dynamic_thresholding', GS.MAIN_APP.decrisp_import.enabled, 'enabled', False)
 			try_to_load('dynamic_thresholding_mimic_scale', GS.MAIN_APP.decrisp_guidance_input, settings, 'dynamic_thresholding_mimic_scale', GS.MAIN_APP.decrisp_import.enabled, 'text')
@@ -305,13 +285,7 @@ def load_settings_from_py(file_path):
 			try_to_load('img_mode_width', GS.MAIN_APP.resolution_selector.resolution_width, settings, ['img_mode', 'width'], GS.MAIN_APP.resolution_import.enabled, 'text')
 			try_to_load('img_mode_height', GS.MAIN_APP.resolution_selector.resolution_height, settings, ['img_mode', 'height'], GS.MAIN_APP.resolution_import.enabled, 'text')
 			if GS.MAIN_APP.prompt_import.enabled:
-				if type(settings["prompt"])!=str:
-					try:
-						GS.MAIN_APP.prompt.input.text = str(settings["prompt"][i])
-					except:
-						print(f'Prompt loading failed')
-				else:
-					try_to_load('prompt', GS.MAIN_APP.prompt.input, settings, 'prompt', True, 'text')
+				try_to_load('prompt', GS.MAIN_APP.prompt.input, settings, 'prompt', True, 'text')
 			if GS.MAIN_APP.uc_import.enabled:
 				if settings.get('negative_prompt'):
 					uc_label='negative_prompt'
@@ -322,13 +296,7 @@ def load_settings_from_py(file_path):
 				if uc_label==None:
 					GS.MAIN_APP.uc.input.text = ''
 				else:
-					if type(settings[uc_label])!=str:
-						try:
-							GS.MAIN_APP.uc.input.text = str(settings[uc_label][i])
-						except:
-							print(f'UC loading failed')
-					else:
-						try_to_load('negative_prompt', GS.MAIN_APP.uc.input, settings, uc_label, True, 'text')
+					try_to_load('negative_prompt', GS.MAIN_APP.uc.input, settings, uc_label, True, 'text')
 			try_to_load('noise_schedule', GS.MAIN_APP.noise_schedule_button, settings, 'noise_schedule', GS.MAIN_APP.sampler_import.enabled, 'text', 'default')
 			if settings.get('collage_dimensions'):
 				try_to_load('collage_dimensions', GS.MAIN_APP.cc_dim_width, settings, ['collage_dimensions', 0], GS.MAIN_APP.cc_dim_import.enabled, 'text')

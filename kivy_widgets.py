@@ -130,6 +130,7 @@ LabelBase.register(name='Unifont', fn_regular=GS.FULL_DIR + 'Fonts/unifont_jp-15
 LabelBase.register(name='NotoEmoji', fn_regular=GS.FULL_DIR + 'Fonts/NotoEmoji-VariableFont_wght.ttf')
 
 # Functions used to link the SMEA and Dyn buttons in such a way that enabling Dyn makes sure SMEA is enabled, and that disabling SMEA disables Dyn
+### This also needs to be extracted to the provider
 @handle_exceptions
 def on_smea_disabled(value, linked_button):
 	if not value:
@@ -1114,8 +1115,8 @@ class SeedGrid(BoxLayout):
 		self.height = GS.UI_field_height*4
 		self.cc_seed_grid = GridLayout(cols=3, size_hint=(1, None), size=(100, GS.UI_field_height*4))
 		
-		self.seed_cols_input = ScrollInput(text='3', size_hint=(1, None), width=60, height=GS.UI_field_height)
-		self.seed_rows_input = ScrollInput(text='3', size_hint=(1, None), width=60, height=GS.UI_field_height)
+		self.seed_cols_input = ScrollInput(text='3', size_hint=(1, None), width=60, height=GS.UI_field_height, tooltip_types=['Seed Columns'])
+		self.seed_rows_input = ScrollInput(text='3', size_hint=(1, None), width=60, height=GS.UI_field_height, tooltip_types=['Seed Rows'])
 		self.seed_mult_label = Label(text='×', size_hint=(None, None), width=20, height=GS.UI_field_height)
 		self.dim_input_layout = BoxLayout(orientation='horizontal', size_hint=(1, None), height=GS.UI_field_height)
 		self.dim_input_layout.add_widget(self.seed_cols_input)
