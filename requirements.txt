@@ -1,0 +1,11 @@
+fontTools
+pillow
+numpy
+kivy
+packaging
+regex
+requests
+imageio
+ftfy
+
+imageio[pyav] ?
