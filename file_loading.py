@@ -348,6 +348,7 @@ def load_settings_from_py(file_path):
 					else:
 						GS.MAIN_APP.is_video.enabled = False
 					try_to_load('FPS', GS.MAIN_APP.is_fps, settings, 'FPS', True, 'text')
+			GS.MODULE_FACTORY.selected_provider.load_settings('py', settings)
 			print(f'Loading settings from .py settings file successful')
 		else:
 			print(f'[Warning] Unidentified .py file type, no action taken')
@@ -423,10 +424,8 @@ def load_settings_from_image(file_path):
 				GS.MAIN_APP.model_button.text = claiming_provider[1]
 				GS.MAIN_APP.model_button.gen_value = claiming_provider[2]
 
-	GS.MAIN_APP.steps_f.enabled = False
-	GS.MAIN_APP.guidance_f.enabled = False
-	try_to_load('steps', GS.MAIN_APP.steps_slider_min, comment_dict, 'steps', GS.MAIN_APP.steps_import.enabled, 'value')
-	try_to_load('scale', GS.MAIN_APP.guidance_input_min, comment_dict, 'scale', GS.MAIN_APP.guidance_import.enabled, 'text')
+	try_to_load('steps', GS.MAIN_APP.steps_input, comment_dict, 'steps', GS.MAIN_APP.steps_import.enabled, 'text')
+	try_to_load('scale', GS.MAIN_APP.guidance_input, comment_dict, 'scale', GS.MAIN_APP.guidance_import.enabled, 'text')
 	try_to_load('guidance_rescale', GS.MAIN_APP.guidance_rescale_input_f, comment_dict, 'cfg_rescale', GS.MAIN_APP.guidance_import.enabled, 'text', 0)
 	if GS.MAIN_APP.resolution_import.enabled:
 		if comment_dict.get('width'):
@@ -453,7 +452,6 @@ def load_settings_from_image(file_path):
 					GS.MAIN_APP.sampler_smea.enabled = True
 					GS.MAIN_APP.sampler_dyn.enabled = False
 				else:
-					sampler_string += ', '
 					GS.MAIN_APP.sampler_button.gen_value = sampler_string
 					key = next((k for k, v in GS.MODULE_FACTORY.selected_provider.CONSTANTS['SAMPLERS'].items() if v == sampler_string), None)
 					if key == None:
@@ -488,4 +486,5 @@ def load_settings_from_image(file_path):
 			GS.MAIN_APP.uc.input.text = comment_dict["uc"]
 		else:
 			try_to_load('negative_prompt', GS.MAIN_APP.uc.input, comment_dict,'negative_prompt', True, 'text', '')
+	GS.MODULE_FACTORY.selected_provider.load_settings('img', comment_dict)
 	print(f'Loading from picture successful')

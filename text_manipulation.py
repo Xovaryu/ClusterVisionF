@@ -265,6 +265,9 @@ def f_string_pre_processor(text):
 # No @handle_exceptions since this function has it's own exception handling
 def f_string_processor(string_list, eval_guard, var_dict):
 	processed_string=""
+	if not type(string_list) == list:
+		string_list = [string_list]
+	print(string_list)
 	for string in string_list:
 		if eval_guard:
 			try: # Here we manually override access to builtins for extra safety

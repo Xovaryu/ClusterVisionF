@@ -120,11 +120,14 @@ class ClusterVisionF(App):
 		Window.bind(on_drop_end=FL.on_drop_end)
 		
 		# These are the main 3 layouts containing the primary inputs on the left, console and additional inputs, as well as image handling on the right
-		self.input_layout = BoxLayout(orientation='vertical')
+		self.top_input_layout = BoxLayout(orientation='vertical')
 		self.meta_layout = BoxLayout(orientation='vertical', size_hint=(0.5, 1))
 		self.image_organization_layout = BoxLayout(orientation='vertical')
 		
-		
+		self.input_scrollview = KW.PermissiveScrollView(effect_cls=ScrollEffect)
+		self.input_layout = KW.FlexibleBoxLayout(orientation='vertical', size_hint_y=None)
+		#self.input_layout.bind(minimum_height=self.input_layout.setter('height'))
+		self.input_scrollview.add_widget(self.input_layout)
 		Window.clearcolor = GS.theme["ProgBg"]['value']
 		self.config_window = KW.ConfigWindow(title=f'Configure Settings (Version: {GS.VERSION})')
 		self.theme_window = KW.ThemeWindow(title='Configure Theme')
@@ -148,7 +151,8 @@ class ClusterVisionF(App):
 		mode_row.add_widget(mode_label)
 		mode_row.add_widget(settings_button)
 		mode_row.add_widget(mode_switcher_layout)
-		self.input_layout.add_widget(mode_row)
+		self.top_input_layout.add_widget(mode_row)
+		self.top_input_layout.add_widget(self.input_scrollview)
 		
 		# Generation Providers
 		generation_provider_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
@@ -371,7 +375,6 @@ class ClusterVisionF(App):
 			else:
 				self.noise_schedule_button.parent.remove_widget(self.noise_schedule_button)
 				sampler_sublayout_bottom.add_widget(self.noise_schedule_button, index=0)
-		self.sampler_injector_dropdown.register_scrollable(self.noise_schedule_button)
 
 		self.sampler_smea = KW.StateShiftButton(text='SMEA', size_hint=(None, 1), size=(60,GS.UI_field_height))
 		self.sampler_dyn = KW.StateShiftButton(text='Dyn', size_hint=(None, 1), size=(46,GS.UI_field_height))
@@ -416,6 +419,7 @@ class ClusterVisionF(App):
 
 		# Prompt
 		prompt_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height*4)
+		prompt_row.flex_min_height = GS.UI_field_height*4
 		prompt_label = Label(text='Prompt:', **GS.l_row_size)
 		prompt_buttons_layout = BoxLayout(orientation='vertical', **GS.imp_row_size)
 		self.prompt_import = KW.ImportButton()
@@ -443,6 +447,7 @@ class ClusterVisionF(App):
 
 		# UC
 		uc_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height*4)
+		uc_row.flex_min_height = GS.UI_field_height*4
 		uc_label = Label(text='Neg. Prompt:', **GS.l_row_size)
 		uc_buttons_layout = BoxLayout(orientation='vertical', **GS.imp_row_size)
 		self.uc_import = KW.ImportButton()
@@ -508,7 +513,7 @@ class ClusterVisionF(App):
 		action_buttons_row.add_widget(action_buttons_label)
 		action_buttons_row.add_widget(Label(text='', size_hint=(None, None), size=(0,0)))
 		action_buttons_row.add_widget(action_buttons_layout)
-		self.input_layout.add_widget(action_buttons_row)
+		self.top_input_layout.add_widget(action_buttons_row)
 
 		# In the middle is the self.meta_layout with the console, task tracker and some more relevant buttons
 		task_state_layout = BoxLayout(orientation='vertical', size_hint=(1, None), height=GS.UI_field_height*5)
@@ -621,7 +626,7 @@ class ClusterVisionF(App):
 		# The super_layout is the highest layout in the hierarchy and is also the one that is returned for Kivy to display
 		# It has the user interaction section left, the console/task data section in the middle, and the image organization on the right		
 		self.super_layout = BoxLayout(orientation='horizontal')
-		self.super_layout.add_widget(self.input_layout)
+		self.super_layout.add_widget(self.top_input_layout)
 		self.super_layout.add_widget(self.meta_layout)
 		self.super_layout.add_widget(self.image_organization_layout)
 
@@ -679,7 +684,7 @@ class ClusterVisionF(App):
 			'folder_name': self.folder_name_input.text,
 			'folder_name_extra': '',
 			'provider': GS.MODULE_FACTORY.selected_provider,
-			'model': self.model_button.text,
+			'model': self.model_button.gen_value,
 			'seed': int(seed),
 			'sampler': self.get_sampler_setting(),
 			'scale': self.guidance_input.text,
@@ -696,6 +701,7 @@ class ClusterVisionF(App):
 				'eval_guard': self.config_window.eval_guard_button.enabled
 			}
 		}
+		settings.update(GS.MODULE_FACTORY.selected_provider.update_settings())
 		self.get_image_entries(settings, False)
 		if IM_G.f_variables_processor(settings, settings, blank_eval_dict) == 'Error':
 			return
@@ -713,18 +719,8 @@ class ClusterVisionF(App):
 	@handle_exceptions
 	def on_queue_button_press(self, instance):
 		# Get shared settings from text inputs and sliders
-		if self.steps_f.enabled:
-			steps = self.steps_input_f.text
-		else:
-			steps = [int(self.steps_slider_min.value),(self.steps_slider_max.value)]
-			if steps[0] == steps[1]:
-				steps=steps[0]
-		if self.guidance_f.enabled:
-			scale = self.guidance_input_f.text
-		else:
-			scale = [float(self.guidance_input_min.text), float(self.guidance_input_max.text)]
-			if scale[0] == scale[1]:
-				scale=scale[0]
+		steps = self.steps_input.text
+		scale = self.guidance_input.text
 		guidance_rescale = self.guidance_rescale_input_f.text
 		img_mode = {'width': int(self.resolution_selector.resolution_width.text),
 								'height': int(self.resolution_selector.resolution_height.text)}
@@ -735,6 +731,7 @@ class ClusterVisionF(App):
 		'negative_prompt': uc, 'dynamic_thresholding': self.decrisp_button.enabled,
 		'dynamic_thresholding_mimic_scale': self.decrisp_guidance_input.text if self.decrisp_button.enabled else 10,
 		'dynamic_thresholding_percentile': self.decrisp_percentile_input.text if self.decrisp_button.enabled else 0.999,}
+		settings.update(GS.MODULE_FACTORY.selected_provider.update_settings())
 
 		self.get_image_entries(settings, True)
 
@@ -858,3 +855,6 @@ class ClusterVisionF(App):
 if __name__ == '__main__':
 	GS.MAIN_APP = ClusterVisionF()
 	GS.MAIN_APP.run()
+	for provider_name, provider in GS.MODULE_FACTORY.providers.items():
+		if hasattr(provider, 'exit_cleanup'):
+			provider.exit_cleanup()

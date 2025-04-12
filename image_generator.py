@@ -3,8 +3,7 @@ image_generator.py
 	This module is responsible for the actual image (and video) generation
 
 02.	image_gen
-			This is the primary function to generate images, it takes the finished settings, requests the generation from NAI's servers
-			It will retry until either the generation was successful, or cancelled
+			This is the primary function to generate images, it will retry until either the generation was successful, or cancelled
 03.	generate_seed + generate_seed_cluster
 			generate_seeds makes a numerical seed like NAI would, and generate_seed_cluster simple takes in dimensions and makes an array of such seeds
 04.	make_vid
@@ -46,10 +45,8 @@ import sys
 import os
 import io
 import time
-import requests
 import json
 import base64
-import time
 import subprocess
 import math
 import random
@@ -72,11 +69,9 @@ from kivy.clock import Clock
 
 # ---Primary Functions---
 
-
-
 # 2. The primary function to generate images. Sends the request and will persist until it is fulfilled, then saves the image, and returns the path
 @handle_exceptions
-def image_gen(prompt,filepath,enumerator,test=False):
+def image_gen(prompt,filepath,enumerator,provider,test=False):
 	skipped = False
 	retry_time=5
 	while GS.generate_images or test:
@@ -98,15 +93,20 @@ def image_gen(prompt,filepath,enumerator,test=False):
 				#print(f'''Model: {prompt[0]["model"]}\nPrompt:\n{prompt[0]["input"]}\nUC:\n{prompt[0]["parameters"]["negative_prompt"]}''')
 
 			start=time.time()
-			generation=GS.MODULE_FACTORY.providers[GS.MAIN_APP.generation_provider_button.text].generate_image(prompt, test)
+			generation=provider.generate_image(prompt, test)
 			end=time.time()
 			processing_time=end-start
 			print(f'Generation Time: {(processing_time)}s')
 			
 			if test and (generation == 'Success' or generation == 'Error'):
 				return generation
-			GS.MODULE_FACTORY.providers[GS.MAIN_APP.generation_provider_button.text].handle_result(generation, filepath)
-			break
+			elif generation == 'Retry':
+				continue
+			elif generation == 'Error':
+				return 'Error'
+			else:
+				provider.handle_result(generation, filepath)
+				break
 		except:
 			traceback.print_exc() if GS.verbose else None
 			if test:
@@ -117,7 +117,7 @@ def image_gen(prompt,filepath,enumerator,test=False):
 				if GS.cancel_request: break
 			retry_time+=5
 			continue
-		time.sleep(float(GS.MAIN_APP.wait_time_input.text)) # Waiting for the specified amount to avoid getting limited or frying the GPU etc
+		time.sleep(float(GS.MAIN_APP.wait_time_input.text)) # Waiting for the specified amount to avoid getting limited or frying the GPU, etc
 
 	if not skipped and GS.generate_images:
 		GS.produced_images += 1
@@ -513,18 +513,12 @@ def create_image_stripe(subimages, stripe_width, line_height):
 
 # 7. Simply formats and passes the prompt to image_gen, used for simple generations, complex external logic or an auth token test
 @handle_exceptions
-def generate_as_is(settings,enumerator,test=False,token=''):
-	if test: #This is the raw testing dict used when evaluating whether a NAI user token us usable or not
-		settings = {'name': 'Test', 'folder_name': '', 'folder_name_extra': '', 'model': 'nai-diffusion-2', 'seed': 0, 'sampler': 'k_euler_ancestral', 'noise_schedule': 'native', 'scale': 10.0,
-			'steps': 1, 'img_mode': {'width': 64, 'height': 64}, 'prompt': 'Test', 'negative_prompt': 'Test', 'smea': False, 'dyn': False, 'dynamic_thresholding': False,
-			'dynamic_thresholding_mimic_scale': 10, 'dynamic_thresholding_percentile': 0.999, 'guidance_rescale': 0}
-		GS.MAIN_APP.config_window.process_token_callback(image_gen(GS.MODULE_FACTORY.providers[GS.MAIN_APP.generation_provider_button.text].form_prompt(settings),'','',test=token), token)
-		return
-	prompt=GS.MODULE_FACTORY.providers[GS.MAIN_APP.generation_provider_button.text].form_prompt(settings)
+def generate_as_is(settings,enumerator,test=False):
+	prompt=GS.MODULE_FACTORY.providers[settings["provider"]].form_prompt(settings)
 	filepath=TM.make_file_path(prompt,enumerator,settings["folder_name"],settings["folder_name_extra"])
 	if GS.verbose:
 		GS.last_fully_formed_prompt = prompt
-	return image_gen(prompt,filepath,enumerator)
+	return image_gen(prompt,filepath,enumerator,settings["provider"],test)
 
 def decode_sampler_string(string, provider, cluster_string = False):
 	sampler_settings={}
@@ -937,6 +931,7 @@ def f_variables_processor(settings, img_settings, var_dict):
 						'strength': float(TM.f_string_processor([entry_data["vt"]["strength"]], settings["meta"]["eval_guard"], var_dict)),
 						'information_extracted': float(TM.f_string_processor([entry_data["vt"]["information"]], settings["meta"]["eval_guard"], var_dict)),
 					})
+	GS.MODULE_FACTORY.selected_provider.f_processor(settings, img_settings, var_dict)
 	return None  # Explicit return of None if no errors occurred
 
 # ---Task processing functions---

@@ -95,8 +95,9 @@ from kivy.core.clipboard import Clipboard
 from kivy.core.window import Window
 from kivy.core.image import Image as CoreImage
 from kivy.effects.dampedscroll import ScrollEffect
-from kivy.graphics import Color, Rectangle, Line, Triangle
+from kivy.graphics import Color, Rectangle, Line, Triangle, PushMatrix, PopMatrix, Scale, Translate
 from kivy.graphics.texture import Texture
+from kivy.graphics.svg import Svg
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.bubble import Bubble
@@ -113,10 +114,10 @@ from kivy.uix.scrollview import ScrollView
 from kivy.uix.popup import Popup
 from kivy.uix.widget import Widget
 from kivy.properties import BooleanProperty, NumericProperty, ListProperty, ObjectProperty
+from kivy.uix.scatter import Scatter
 
 ###Provisory copy for now
-RESOLUTIONS = copy.deepcopy(GS.NAI_RESOLUTIONS)
-RESOLUTIONS.update(GS.USER_RESOLUTIONS)
+RESOLUTIONS = copy.deepcopy(GS.USER_RESOLUTIONS)
 from kivy.core.text import LabelBase
 font_hyper=20
 font_large=19
@@ -193,6 +194,37 @@ def nuke_widgets(widgets):
 			for event_name in list(widget.events()):
 				for bound_func in widget.get_property_observers(event_name):
 					widget.unbind(**{event_name: bound_func})
+
+class AutoRegisterScrollBehavior(object):
+	@handle_exceptions
+	def on_parent(self, instance, parent):
+		# Defer registration until the next frame.
+		Clock.schedule_once(lambda dt: self.update_registration(parent), 0)
+
+	@handle_exceptions
+	def update_registration(self, parent):
+		# If we were previously registered with a container, unregister first.
+		if hasattr(self, '_scroll_container') and self._scroll_container:
+			self._scroll_container.unregister_scrollable(self)
+			self._scroll_container = None
+
+		# If we have a parent, search up the hierarchy for a container.
+		if parent:
+			container = self._find_scroll_container(parent)
+			if container:
+				container.register_scrollable(self)
+				self._scroll_container = container
+
+	@handle_exceptions
+	def _find_scroll_container(self, widget):
+		depth = 0
+		max_depth = 50
+		while widget and depth < max_depth:
+			if hasattr(widget, 'register_scrollable'):
+				return widget
+			widget = widget.parent
+			depth += 1
+		return None
 
 # 01. Simplifies the dynamic applying of themes by creating a standardized way of fetching and setting colors for all relevant widgets
 class ThemeRegisterBehavior(object):
@@ -349,7 +381,6 @@ class ToolTip(DropDown, ThemeRegisterBehavior):
 		super().update_color(instance)
 		self.arrow_color = GS.theme["TTBgOutline"]["value"]
 	
-
 # 03. These are simply basic Kivy widgets that are slightly updated to automatically register themselves for applications of themes
 class Label(Label, ThemeRegisterBehavior):
 	@handle_exceptions
@@ -362,7 +393,7 @@ class Button(ToolTipBehavior, Button, ThemeRegisterBehavior):
 		super().__init__(text_color_dict = text_color_dict, bg_color_dict = bg_color_dict, **kwargs)
 		self.finalize_tooltip()
 
-class TextInput(ToolTipBehavior, TextInput, ThemeRegisterBehavior):
+class TextInput(AutoRegisterScrollBehavior, ToolTipBehavior, TextInput, ThemeRegisterBehavior):
 	@handle_exceptions
 	def __init__(self, fg_color_dict = GS.theme["InText"], bg_color_dict = GS.theme["InBg"],**kwargs):		
 		super().__init__(fg_color_dict = fg_color_dict, bg_color_dict = bg_color_dict, **kwargs)
@@ -507,6 +538,7 @@ class ScrollInput(TextInput):
 	@handle_exceptions
 	def __init__(self, min_value=1, max_value=100, increment=1, fi_mode=int, round_value=6, allow_empty=False, **kwargs):
 		self.tooltip_depth += 1
+		self.scrollable = True
 		super().__init__(**kwargs)
 		self.tooltip_types.append('Scroll-Input')
 		self.multiline = False
@@ -984,7 +1016,7 @@ class SamplerInjectorDropDown(InjectorDropDown):
 		return string + ', '
 """
 # 16. A slightly more advanced dropdown button that allows scrolling values without opening the dropdown
-class ScrollDropDownBehavior(object):
+class ScrollDropDownBehavior(AutoRegisterScrollBehavior, object):
 	@handle_exceptions
 	def __init__(self, associated_dropdown, get_children_func=None, set_state_func=None, **kwargs):
 		self.associated_dropdown = associated_dropdown
@@ -1458,37 +1490,6 @@ class FileHandlingWindow(Popup):
 # 23. Popup for configuring settings
 class ConfigWindow(Popup):
 	@handle_exceptions
-	def process_token(self, instance):
-		token = self.token_input.text
-		match = re.search(r'"auth_token":"([^"]+)"', token)
-		if match:
-			token = match.group(1)
-		future = GS.EXECUTOR.submit(IM_G.generate_as_is,None,None,True,token)
-
-	@handle_exceptions
-	def process_token_callback(self, result, token):
-		if result == 'Success':
-			self.token_input.text = token
-			token_file_content = f"""#Only the access token goes into this file. Do not share it with anyone else as that's against NAI ToS. Using it on multiple of your own devices is fine.
-AUTH='{token}'
-"""
-			CH.write_config_file(os.path.join(GS.SETTINGS_DIR, "3.Token(DO NOT SHARE).py"),token_file_content)
-			Clock.schedule_once(lambda dt: self.update_token_state(result))
-			GS.AUTH = token
-		else:
-			Clock.schedule_once(lambda dt: self.update_token_state(result))
-			return
-
-	@handle_exceptions
-	def update_token_state(self,state):
-		if state=='Success':
-			self.token_state.update_color(None)
-			self.token_state.text = '✔️'
-		else:
-			self.token_state.update_color(None)
-			self.token_state.text = '❌'
-
-	@handle_exceptions
 	def switch_eval_behavior(self,instance,label):
 		if not instance.enabled:
 			label.text = 'f-strings are evaluated in guarded mode'
@@ -1514,24 +1515,21 @@ AUTH='{token}'
 		self.size_hint = (0.97, 0.97)
 		self.bind(on_open=self.check_for_error)
 		# Set up and add all the elements for the theme configurator
-		layout = BoxLayout(orientation='vertical')
+		self.layout = BoxLayout(orientation='vertical')
 		
 		user_settings_label = Label(text='User Settings:', size_hint=(1,None), size=(100,GS.UI_field_height), font_size=font_hyper)
 		
-		creator_name_label = Label(text='Creator name:', size_hint=(None,None), size=(300,GS.UI_field_height))
 		creator_name_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
+		creator_name_label = Label(text='Creator name:', size_hint=(None,None), size=(300,GS.UI_field_height))
 		self.creator_name_input = TextInput(text=GS.CREATOR_NAME, multiline=False, size_hint=(1,None), height=GS.UI_field_height)
 		creator_name_layout.add_widget(creator_name_label)
 		creator_name_layout.add_widget(self.creator_name_input)
 		
-		# Set up and add all the necessary elements for token handling
-		token_button = Button(text='Set NovelAI token (DO NOT SHARE):', on_release=self.process_token, size_hint=(None,None), size=(300,GS.UI_field_height))
-		self.token_state = BgLabel(font_name='NotoEmoji', text='❔', size_hint=(None,None), size=(GS.UI_field_height,GS.UI_field_height), register_to = None)
-		token_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
-		self.token_input = TextInput(text=GS.AUTH, multiline=False, size_hint=(1,None), size=(100+GS.UI_field_height,GS.UI_field_height))
-		token_layout.add_widget(token_button)
-		token_layout.add_widget(self.token_state)
-		token_layout.add_widget(self.token_input)
+		date_format_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
+		date_format_label = Label(text='Date format:', size_hint=(None,None), size=(300,GS.UI_field_height))
+		self.date_format_input = TextInput(text=GS.date_format, multiline=False, size_hint=(1,None), height=GS.UI_field_height)
+		date_format_layout.add_widget(date_format_label)
+		date_format_layout.add_widget(self.date_format_input)
 		
 		spacer_layout_1 = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
 		generation_settings_label = Label(text='Generation Settings:', size_hint=(1,None), size=(100,GS.UI_field_height), font_size=font_hyper)
@@ -1561,21 +1559,27 @@ AUTH='{token}'
 		
 		self.copy_error_button = Button(text='Copy last error to clipboard', on_release=handle_exceptions(lambda btn: Clipboard.copy(GS.last_error)), size_hint=(1,None), size=(100,GS.UI_field_height), disabled=True)
 		
-		layout.add_widget(user_settings_label)
-		layout.add_widget(creator_name_layout)
-		layout.add_widget(token_layout)
+		spacer_layout_3 = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
+		provider_settings_label = Label(text='Provider Settings:', size_hint=(1,None), size=(100,GS.UI_field_height), font_size=font_hyper)
 		
-		layout.add_widget(spacer_layout_1)
-		layout.add_widget(generation_settings_label)
-		layout.add_widget(history_length_layout)
-		layout.add_widget(skip_button)
-		#layout.add_widget(vid_params_layout)
-		layout.add_widget(eval_guard_layout)
+		self.layout.add_widget(user_settings_label)
+		self.layout.add_widget(creator_name_layout)
 		
-		layout.add_widget(spacer_layout_2)
-		layout.add_widget(misc_settings_label)
-		layout.add_widget(self.copy_error_button)
-		self.add_widget(layout)
+		self.layout.add_widget(spacer_layout_1)
+		self.layout.add_widget(generation_settings_label)
+		self.layout.add_widget(history_length_layout)
+		self.layout.add_widget(skip_button)
+		#self.layout.add_widget(vid_params_layout)
+		self.layout.add_widget(eval_guard_layout)
+		
+		self.layout.add_widget(spacer_layout_2)
+		self.layout.add_widget(misc_settings_label)
+		self.layout.add_widget(self.copy_error_button)
+		
+		self.layout.add_widget(spacer_layout_3)
+		self.layout.add_widget(provider_settings_label)
+		
+		self.add_widget(self.layout)
 
 	# Saves the current state of the user settings
 	@handle_exceptions
@@ -1944,6 +1948,7 @@ class ImageGenerationEntry(BoxLayout):
 		self.preview.img2img = self.i2i_true
 		self.preview.vibe_transfer = self.vt_true
 
+	@handle_exceptions
 	def setup_full_ui(self):
 		# Here we build up the necessary UI elements for image2image handling
 		self.i2i_main_layout = BoxLayout(orientation='vertical', size_hint=(1, 1))
@@ -2021,9 +2026,7 @@ class ImageGenerationEntry(BoxLayout):
 		self.content_box.add_widget(self.i2i_main_layout)
 		self.content_box.add_widget(self.vt_main_layout)
 
-		self.scrollable_sub_widgets = [self.i2i_condition_input, self.i2i_strength_input, self.i2i_noise_input,
-			self.vt_condition_input, self.vt_strength_input, self.vt_information_input]
-
+	@handle_exceptions
 	def setup_generation_ui(self):
 		# Set up the minimal UI for generation history
 		self.metadata_button = Button(text='Metadata', size_hint_y=None, height=GS.UI_field_height, tooltip_types=['Metadata Viewer'])
@@ -2089,9 +2092,6 @@ class ImageGenerationEntry(BoxLayout):
 			if GS.MAIN_APP.preview.last_associated_image_entry:
 				if GS.MAIN_APP.preview.last_associated_image_entry.preview == self.preview:
 					GS.MAIN_APP.preview.last_associated_image_entry = None
-			if not self.generation:
-				for scrollable_sub_widget in self.scrollable_sub_widgets:
-					self.parent.parent.unregister_scrollable(scrollable_sub_widget)
 			if GS.last_i2i_image == self:
 				GS.last_i2i_image = None
 			del self.raw_image_data
@@ -2103,12 +2103,6 @@ class ImageGenerationEntry(BoxLayout):
 	@handle_exceptions
 	def on_destructible(self, *args):
 		self.destruct_button.disabled = not self.destructible
-
-	@handle_exceptions
-	def on_parent(self, *args):
-		if not self.generation and self.parent != None:
-			for scrollable_sub_widget in self.scrollable_sub_widgets:
-				self.parent.parent.register_scrollable(scrollable_sub_widget)
 
 class BorderedImage(BoxLayout):
 	displayed = BooleanProperty(False)
@@ -2215,25 +2209,147 @@ class PermissiveScrollViewBehavior(object):
 
 class PermissiveDropDown(PermissiveScrollViewBehavior, DropDown):
 	pass
+class PermissiveScrollView(PermissiveScrollViewBehavior, ScrollView):
+	pass
+
+class FlexibleBoxLayout(BoxLayout):
+    """
+    A vertical BoxLayout that automatically adjusts its children’s heights.
+    
+    It distinguishes between fixed children and flexible children:
+      - Fixed children are those without a custom attribute `flex_min_height`
+        (or with it set to None). Their height is taken as-is.
+      - Flexible children define a custom attribute `flex_min_height` (which you
+        must assign manually) and must have size_hint_y set to None. Their "base"
+        height is given by flex_min_height and, if extra vertical space is available,
+        that extra is evenly distributed among all flexible children.
+    
+    This layout listens to changes in its own size, the window size, and also to
+    changes in any child's height so that it can respond when:
+      1. The window is resized (fixing the lagging behavior).
+      2. A child layout changes its own size.
+    
+    The update is scheduled via Clock so that rapid changes (or updates while the
+    parent is still being laid out) won’t cause jitter.
+    """
+    def __init__(self, **kwargs):
+        # Force vertical orientation and disable automatic height sizing.
+        kwargs.setdefault('orientation', 'vertical')
+        kwargs.setdefault('size_hint_y', None)
+        super(FlexibleBoxLayout, self).__init__(**kwargs)
+
+        # This flag will be used to ensure only one update is scheduled per frame.
+        self._update_scheduled = False
+
+        # Bind our own changes (size, pos, parent changes) to trigger a recalculation.
+        self.bind(pos=self.schedule_update,
+                  size=self.schedule_update,
+                  parent=self.schedule_update,
+                  children=self._on_children_changed)
+        # Bind the window size to our update so that we react to window resizing.
+        Window.bind(size=self.schedule_update)
+
+        # Bind each current child’s height change:
+        for child in self.children:
+            child.bind(height=self.schedule_update)
+
+        # Schedule the first update after the widget tree settles.
+        Clock.schedule_once(lambda dt: self._do_update_children_heights(), 0)
+
+    def schedule_update(self, *args):
+        """Debounce multiple triggers by scheduling one update on the next frame."""
+        if not self._update_scheduled:
+            self._update_scheduled = True
+            # Schedule our update to run on the next frame.
+            Clock.schedule_once(lambda dt: self._do_update_children_heights(), 0)
+
+    def _do_update_children_heights(self, *args):
+        """
+        Recalculate the heights for our children.
+        
+        The algorithm is:
+          - Determine the available vertical space from our parent (or our own height if no parent).
+          - For each child:
+              * If the child has a non-None `flex_min_height`, treat it as flexible.
+              * Otherwise, treat it as fixed.
+          - Compute the total minimum height required (fixed heights + sum of flexible children’s flex_min_height).
+          - If the total minimum is greater than or equal to the available space (or if there are no flexible children),
+            then each flexible child simply uses its flex_min_height and the layout’s height is set to that total.
+          - Otherwise, distribute the extra space evenly among flexible children and set the layout’s height to the available space.
+        """
+        self._update_scheduled = False  # reset the flag now that we’re updating
+
+        # Determine available space.
+        # (Typically, our parent is a ScrollView's viewport.)
+        available_height = self.parent.height if self.parent else self.height
+
+        fixed_total = 0
+        flexible_children = []
+        flexible_total_min = 0
+
+        # Examine all children
+        for child in self.children:
+            # Force manual control of height.
+            child.size_hint_y = None
+            if hasattr(child, 'flex_min_height') and child.flex_min_height is not None:
+                flexible_children.append(child)
+                flexible_total_min += child.flex_min_height
+            else:
+                fixed_total += child.height
+
+        total_min = fixed_total + flexible_total_min
+
+        if total_min >= available_height or not flexible_children:
+            # Not enough extra space: use minimum sizes for flexible children.
+            for child in flexible_children:
+                child.height = child.flex_min_height
+            # Our container's height is the sum of all children.
+            self.height = total_min
+        else:
+            # There is extra space: distribute it evenly among flexible children.
+            extra_space = available_height - total_min
+            extra_per_child = extra_space / len(flexible_children)
+            for child in flexible_children:
+                child.height = child.flex_min_height + extra_per_child
+            # Set our height to exactly fill the available space.
+            self.height = available_height
+
+    def _on_children_changed(self, instance, children):
+        """
+        When the list of children changes, ensure that each new child is bound
+        to trigger an update when its height changes.
+        """
+        # Unbind and then rebind all children for safety.
+        for child in children:
+            child.unbind(height=self.schedule_update)
+            child.bind(height=self.schedule_update)
+        self.schedule_update()
+
+    def add_widget(self, widget, index=0, *args, **kwargs):
+        """When adding a widget, also bind to its height."""
+        super(FlexibleBoxLayout, self).add_widget(widget, index=index, *args, **kwargs)
+        widget.bind(height=self.schedule_update)
+        self.schedule_update()
+
+    def remove_widget(self, widget, *args, **kwargs):
+        """When removing a widget, unbind its height."""
+        widget.unbind(height=self.schedule_update)
+        super(FlexibleBoxLayout, self).remove_widget(widget, *args, **kwargs)
+        self.schedule_update()
 
 # 30. This class creates a proper metadata viewer that can parse and display both EXIf/alpha metadata verbatim
 class MetadataViewer(BoxLayout):
-	class PermissiveScrollView(PermissiveScrollViewBehavior, ScrollView):
-		pass
-	
 	@handle_exceptions
 	def __init__(self, **kwargs):
 		super().__init__(orientation='vertical', **kwargs)
-		self.scroll_view = self.PermissiveScrollView(effect_cls=ScrollEffect)
+		self.scroll_view = PermissiveScrollView(effect_cls=ScrollEffect)
 		self.content_layout = BoxLayout(orientation='vertical', size_hint_y=None)
 		self.content_layout.bind(minimum_height=self.content_layout.setter('height'))
 		self.scroll_view.add_widget(self.content_layout)
 		self.add_widget(self.scroll_view)
 
-
 	@handle_exceptions
 	def display_metadata(self, raw_image_data):
-		#self.content_layout.clear_widgets()
 		nuke_widgets(self.content_layout.children)
 		alpha_dict, exif_dict, size_fallback = load_metadata_dicts(raw_image_data)
 		self.add_dict_to_layout("Alpha Channel Metadata", alpha_dict)
@@ -2251,10 +2367,8 @@ class MetadataViewer(BoxLayout):
 		for key, value in data_dict.items():
 			if key in ['prompt', 'uc']:
 				row_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height*4)
-				scrollable = True
 			else:
 				row_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=GS.UI_field_height)
-				scrollable = False
 			
 			indent_label = Label(text='↳' * indent + ' ', font_name='Unifont', size_hint_x=None, width=11*indent)
 			key_label = self.create_aligned_label(key, size_hint_x=None)
@@ -2263,8 +2377,7 @@ class MetadataViewer(BoxLayout):
 			row_label_layout.add_widget(indent_label)
 			row_label_layout.add_widget(key_label)
 			row_layout.add_widget(row_label_layout)
-			
-			
+
 			if isinstance(value, dict):
 				self.content_layout.add_widget(row_layout)
 				self.add_dict_items(value, indent + 1)
@@ -2272,9 +2385,7 @@ class MetadataViewer(BoxLayout):
 				value_str = str(value)
 				if len(value_str) > 1500:
 					value_str = value_str[:1500]
-				value_input = TextInput(text=value_str, readonly=True, multiline=scrollable)
-				if scrollable:
-					self.scroll_view.register_scrollable(value_input)
+				value_input = TextInput(text=value_str, readonly=True)
 				row_layout.add_widget(value_input)
 				self.content_layout.add_widget(row_layout)
 
@@ -2296,6 +2407,59 @@ class MetadataViewer(BoxLayout):
 				show_metadata = False
 		GS.unhide_widgets([self] if show_metadata else [GS.MAIN_APP.preview])
 		GS.hide_widgets([GS.MAIN_APP.preview] if show_metadata else [self])
+
+class SvgWidget(Scatter):
+	def __init__(self, svg_path, height=0):
+		super(SvgWidget, self).__init__()
+		self.size_hint = (None, None)
+		self.svg_path = svg_path
+		self.original_svg = None
+		self.bind(size=self._update_svg_scale)
+		self.height = height
+		self.set_svg(svg_path)
+		
+	def set_svg(self, svg_path):
+		self.svg_path = svg_path
+		self.canvas.clear()
+		with self.canvas:
+			self.original_svg = Svg(svg_path)
+		self._update_svg_scale()
+			
+	# Insert these debug prints into _update_svg_scale:
+	def _update_svg_scale(self, *args):
+		if not self.original_svg:
+			return
+		
+		orig_w, orig_h = self.original_svg.width, self.original_svg.height
+		desired_height = self.height if self.height > 0 else orig_h
+		scale = desired_height / orig_h if orig_h else 1
+		new_width = orig_w * scale
+		
+		# Debug prints
+		print(f"[DEBUG] SvgWidget: {self.svg_path}")
+		print(f"  Original Size: {orig_w}x{orig_h}")
+		print(f"  Desired Height: {desired_height}")
+		print(f"  Computed Scale: {scale}")
+		print(f"  Computed Width: {new_width}")
+		print(f"  Current Widget Size: {self.size}")
+		
+		self.width = new_width
+		self.height = desired_height
+		
+		self.canvas.clear()
+		with self.canvas:
+			PushMatrix()
+			Scale(scale, scale, 1)
+			Translate((self.width - (orig_w * scale)) / (2 * scale),
+					  (self.height - (orig_h * scale)) / (2 * scale),
+					  0)
+			Svg(self.svg_path)
+			PopMatrix()
+		
+		# Print final size after update
+		print(f"  Updated Widget Size: {self.size}")
+		print("---")
+
 
 @handle_exceptions
 def create_dropdown_entries(dropdown, items, widgets, target_text_field=None, extra_widget_classes=None, delimiter = ''):

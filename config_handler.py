@@ -72,7 +72,7 @@ USER_UCS = [
 """,
 	'3.Token(DO NOT SHARE)':
 """#Only the access token goes into this file. Do not share it with anyone else as that's against NAI ToS. Using it on multiple of your own devices is fine.
-AUTH=''
+NAI.AUTH=''
 """,
 	'Theme':
 """#Define your desired program colors here or from within CVF, the format is [R, G, B, A] with values from 0 to 1
@@ -276,7 +276,7 @@ CONFIG_FILES = {
 }
 
 # This block here is responsible for moving legacy config files to their new intended locations
-FILES_TO_MOVE = ["1.User_Settings.py", "2.NAID_Constants.py", "3.Theme.py", "4.Token(DO NOT SHARE).py"] 
+FILES_TO_MOVE = ["1.User_Settings.py", "3.Theme.py", "4.Token(DO NOT SHARE).py"] 
 for file in FILES_TO_MOVE:
 	# Build paths
 	old_path = os.path.join(GS.FULL_DIR, file)
@@ -358,12 +358,6 @@ for name, path in CONFIG_FILES.items():
 		write_config_file(name, load = True) # using default configs
 	else:  
 		load_config(path) #load located config file
-
-# Make sure that the NAID constants file is up to date
-if getattr(GS, 'NAID_CONST_VERSION', None) == None:
-	write_config_file("2.NAID_Constants", load = True)
-elif Version(str(GS.NAID_CONST_VERSION)) < Version(str(GS.VERSION)):
-	write_config_file("2.NAID_Constants", load = True)
 
 # This loop ensures that default theme files are always present
 for name, content in THEMES.items():

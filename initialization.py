@@ -26,6 +26,7 @@ import time
 import importlib
 import inspect
 from PIL import ImageFont
+from kivy.clock import Clock
 from kivy.event import EventDispatcher
 from kivy.properties import NumericProperty
 
@@ -72,10 +73,13 @@ class GlobalState(EventDispatcher):
 			cls._instance.FULL_DIR = full_dir
 			cls._instance.EXECUTOR = ThreadPoolExecutor()
 			
+			cls._instance.UI_font_small=15
 			cls._instance.UI_field_height=30
 			cls._instance.l_row_size={'size_hint':(None, 1),'size':(120, cls._instance.UI_field_height)}
 			cls._instance.imp_row_size={'size_hint':(None, 1),'size':(cls._instance.UI_field_height, cls._instance.UI_field_height)}
 			cls._instance.theme = None
+			cls._instance.creator_name = ''
+			cls._instance.date_format = '%d.%m.%Y %H:%M:%S'
 			cls._instance.processing_queue = deque()
 			cls._instance.cancel_request = False
 			cls._instance.overwrite_images = False
@@ -114,19 +118,25 @@ class GlobalState(EventDispatcher):
 
 	@handle_exceptions
 	def unhide_widgets(self, widgets):
-		try:
-			for widget in widgets:
-				widget.opacity = widget.ori_opacity
-				widget.height = widget.ori_height
-				widget.width = widget.ori_width
-				widget.size_hint_y = widget.ori_size_hint_y
-				widget.size_hint_x = widget.ori_size_hint_x
-				
-				widget.clear_widgets()
+		for widget in widgets:
+			widget.opacity = getattr(widget, 'ori_opacity', widget.opacity)
+			widget.height = getattr(widget, 'ori_height', widget.height)
+			widget.width = getattr(widget, 'ori_width', widget.width)
+			widget.size_hint_y = getattr(widget, 'ori_size_hint_y', widget.size_hint_y)
+			widget.size_hint_x = getattr(widget, 'ori_size_hint_x', widget.size_hint_x)
+			
+			widget.clear_widgets()
+			def schedule_registration_recursive(w):
+				if getattr(w, 'update_registration', False):
+					Clock.schedule_once(lambda dt, w=w: w.update_registration(w.parent), 0)
+				for child in getattr(w, 'children', []):
+					schedule_registration_recursive(child)
+
+			if getattr(widget, 'ori_children', False):
 				for child in widget.ori_children:
 					widget.add_widget(child)
-		except:
-			pass
+					schedule_registration_recursive(child)
+
 GS = GlobalState()
 
 # The config handler must be imported at this later point since it loads values into the GlobalState and like all modules uses @handle_exceptions
